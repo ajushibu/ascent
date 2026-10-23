@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test": "node --experimental-strip-types --test src/logic.test.ts src/reconcile.test.ts src/merge.test.ts",
+    "test": "node --experimental-strip-types --test src/logic.test.ts src/reconcile.test.ts src/merge.test.ts src/timer.test.ts",
     "prebuild": "node scripts/icons.mjs"
   },
   "dependencies": {

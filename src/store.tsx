@@ -2,14 +2,14 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { Session as AuthSession } from '@supabase/supabase-js';
 import type { AppState, Goal, Mock, Reflection, Section, Settings, Task } from './types';
 
-export const MIN_COUNT = 5; // minutes needed for a focus session to count
-const LATE_GRACE_MS = 90_000; // a timer that ends while the app is open and awake is logged straight away
-const PAUSED_LIMIT_MS = 3 * 3_600_000; // a timer left paused this long is ended and logs what was done
 import { emptyState, mergeState, normalizeState } from './merge';
 import { reconcile } from './reconcile';
 import { addDays, levelInfo, todayKey, xpTotal } from './logic';
 import { hasBackend, supabase } from './supabase';
 import { buildDemo } from './demo';
+import { now as clockNow, syncClock } from './clock';
+import { MIN_COUNT, creditedMinutes, decide, elapsedMs, nextStamp } from './timer';
+import type { FocusTimer } from './types';
 
 export type SyncStatus = 'local' | 'syncing' | 'synced' | 'offline' | 'error';
 
@@ -259,6 +259,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [schedulePush, showToast]
   );
 
+  /** Ends the timer and, when minutes is given, logs exactly one session for it (the id comes from the timer, so two devices can't double-log). */
+  const endTimer = useCallback(
+    (t: FocusTimer, minutes: number | null, toast?: string) => {
+      const n = clockNow();
+      const sid = `timer:${t.id}`;
+      commit(
+        s => {
+          if (!s.timer?.active || s.timer.id !== t.id) return s;
+          return {
+            ...s,
+            timer: { ...s.timer, active: false, runningSince: null, review: null, updatedAt: nextStamp(s.timer, n) },
+            sessions: minutes != null && !s.sessions.some(x => x.id === sid) ? [...s.sessions, { id: sid, dateKey: todayKey(new Date(t.startedAt)), startedAt: t.startedAt, minutes, section: t.section, taskId: t.taskId, updatedAt: n }] : s.sessions
+          };
+        },
+        toast ? { toast } : undefined
+      );
+    },
+    [commit]
+  );
+
   const api = useMemo<Omit<Store, 'state' | 'today' | 'ready' | 'user' | 'needsAuth' | 'sync' | 'toast' | 'dismissToast'>>(
     () => ({
       signIn: async (email, password) => {
@@ -348,61 +368,43 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         ),
       startTimer: p =>
         commit(s => {
-          const now = Date.now();
-          return { ...s, timer: { id: uid(), active: true, startedAt: now, runningSince: now, elapsedBefore: 0, durationMin: p.durationMin, section: p.section, taskId: p.taskId, updatedAt: now } };
+          if (s.timer?.active) return s; // never replace a timer that is already running (e.g. started on another device)
+          const n = clockNow();
+          return { ...s, timer: { id: uid(), active: true, startedAt: n, runningSince: n, elapsedBefore: 0, durationMin: p.durationMin, section: p.section, taskId: p.taskId, review: null, updatedAt: nextStamp(s.timer, n) } };
         }),
       pauseTimer: () =>
         commit(s => {
           const t = s.timer;
-          if (!t?.active || !t.runningSince) return s;
-          const now = Date.now();
-          return { ...s, timer: { ...t, elapsedBefore: t.elapsedBefore + (now - t.runningSince), runningSince: null, updatedAt: now } };
+          if (!t?.active || !t.runningSince || t.review) return s;
+          const n = clockNow();
+          return { ...s, timer: { ...t, elapsedBefore: elapsedMs(t, n), runningSince: null, updatedAt: nextStamp(t, n) } };
         }),
       resumeTimer: () =>
         commit(s => {
           const t = s.timer;
-          if (!t?.active || t.runningSince) return s;
-          const now = Date.now();
-          return { ...s, timer: { ...t, runningSince: now, updatedAt: now } };
+          if (!t?.active || t.runningSince || t.review) return s;
+          const n = clockNow();
+          return { ...s, timer: { ...t, runningSince: n, updatedAt: nextStamp(t, n) } };
         }),
       finishTimer: () => {
         const t = stateRef.current.timer;
-        if (!t?.active) return null;
-        const now = Date.now();
-        const el = t.elapsedBefore + (t.runningSince ? now - t.runningSince : 0);
-        const full = el >= t.durationMin * 60_000 - 500;
-        const minutes = full ? t.durationMin : Math.floor(el / 60_000);
+        if (!t?.active || t.review) return null;
+        const minutes = creditedMinutes(t, clockNow());
         const counted = minutes >= MIN_COUNT;
-        // the session id comes from the timer, so two devices finishing at once log it only once
-        const sid = `timer:${t.id}`;
-        commit(
-          s => ({
-            ...s,
-            timer: { ...t, active: false, runningSince: null, updatedAt: now },
-            sessions: counted && !s.sessions.some(x => x.id === sid) ? [...s.sessions, { id: sid, dateKey: todayKey(new Date(t.startedAt)), startedAt: t.startedAt, minutes, section: t.section, taskId: t.taskId, updatedAt: now }] : s.sessions
-          }),
-          { toast: counted ? `${minutes} min logged` : 'Session ended' }
-        );
+        endTimer(t, counted ? minutes : null, counted ? `${minutes} min logged` : 'Session ended');
         return { minutes, counted };
       },
       confirmTimer: minutes => {
         const t = stateRef.current.timer;
         if (!t?.active || !t.review) return null;
         const m = Math.max(MIN_COUNT, Math.min(t.review.max, Math.round(minutes)));
-        const now = Date.now();
-        const sid = `timer:${t.id}`;
-        commit(
-          s => ({
-            ...s,
-            timer: { ...t, active: false, runningSince: null, review: null, updatedAt: now },
-            sessions: s.sessions.some(x => x.id === sid) ? s.sessions : [...s.sessions, { id: sid, dateKey: todayKey(new Date(t.startedAt)), startedAt: t.startedAt, minutes: m, section: t.section, taskId: t.taskId, updatedAt: now }]
-          }),
-          { toast: `${m} min logged` }
-        );
+        endTimer(t, m, `${m} min logged`);
         return { minutes: m, counted: true };
       },
-      discardTimer: () =>
-        commit(s => (s.timer?.active ? { ...s, timer: { ...s.timer, active: false, runningSince: null, review: null, updatedAt: Date.now() } } : s)),
+      discardTimer: () => {
+        const t = stateRef.current.timer;
+        if (t?.active) endTimer(t, null);
+      },
       saveMock: m =>
         commit(
           s => {
@@ -442,40 +444,37 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
       importState: raw => commit(s => mergeState(s, normalizeState(raw)))
     }),
-    [commit]
+    [commit, endTimer]
   );
 
-  /* A timer must end by itself: when its time is up, or if it was left paused for hours.
-     This lives here (not in the timer screen) so it also works when the app was closed or the phone was locked:
-     the full time is credited the moment the app is next open. */
+  /* A timer must end by itself: when its time is up, or if it was left paused for hours. This lives here (not in the
+     timer screen) so it also works when the app was closed or the phone was locked. What it does is decided by
+     decide() in timer.ts: log it if someone was watching, otherwise ask how long they really studied. */
   const { finishTimer, discardTimer } = api;
-  const setReview = (t: NonNullable<AppState['timer']>, max: number) =>
-    commit(s => (s.timer?.id === t.id && s.timer.active && !s.timer.review ? { ...s, timer: { ...s.timer, runningSince: null, elapsedBefore: max * 60_000, review: { max }, updatedAt: Date.now() } } : s));
+  const setReview = useCallback(
+    (id: string, max: number) =>
+      commit(s => (s.timer?.id === id && s.timer.active && !s.timer.review ? { ...s, timer: { ...s.timer, runningSince: null, elapsedBefore: max * 60_000, review: { max }, updatedAt: nextStamp(s.timer, clockNow()) } } : s)),
+    [commit]
+  );
   useEffect(() => {
     if (!ready) return;
     const check = () => {
       const t = stateRef.current.timer;
-      if (!t?.active || t.review) return;
-      const now = Date.now();
-      const el = t.elapsedBefore + (t.runningSince ? now - t.runningSince : 0);
-      const total = t.durationMin * 60_000;
-      if (t.runningSince && el >= total - 500) {
-        // Ended while someone was looking: log it. Ended while the app was closed or the phone locked: we can't know
-        // whether they studied, so they confirm how long they really did (never a silent, possibly fake entry).
-        const lateMs = el - total;
-        if (lateMs <= LATE_GRACE_MS && document.visibilityState !== 'hidden') finishTimer();
-        else setReview(t, t.durationMin);
-      } else if (!t.runningSince && now - t.updatedAt > PAUSED_LIMIT_MS) {
-        const max = Math.floor(t.elapsedBefore / 60_000);
-        if (max >= MIN_COUNT) setReview(t, max);
-        else discardTimer(); // too short to count
-      }
+      const a = decide(t, clockNow(), document.visibilityState !== 'hidden');
+      if (!a || !t) return;
+      if (a.kind === 'finish') finishTimer();
+      else if (a.kind === 'review') setReview(t.id, a.max);
+      else discardTimer();
     };
-    check();
+    syncClock(true).then(check);
     const t = state.timer;
-    const left = t?.active && t.runningSince ? t.durationMin * 60_000 - (t.elapsedBefore + (Date.now() - t.runningSince)) : null;
+    const left = t?.active && t.runningSince && !t.review ? t.durationMin * 60_000 - elapsedMs(t, clockNow()) : null;
     const id = left != null ? window.setTimeout(check, Math.max(0, left) + 300) : null;
-    const wake = () => document.visibilityState !== 'hidden' && check();
+    const wake = () => {
+      if (document.visibilityState === 'hidden') return;
+      syncClock();
+      check();
+    };
     document.addEventListener('visibilitychange', wake);
     window.addEventListener('pageshow', wake);
     window.addEventListener('focus', wake);
@@ -487,7 +486,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       window.removeEventListener('pageshow', wake);
       window.removeEventListener('focus', wake);
     };
-  }, [ready, state.timer, finishTimer, discardTimer]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ready, state.timer, finishTimer, discardTimer, setReview]);
 
   const value: Store = {
     state,

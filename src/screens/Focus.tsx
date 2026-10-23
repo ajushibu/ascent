@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Section } from '../types';
 import { SECTION_LABEL } from '../types';
-import { MIN_COUNT, useStore } from '../store';
+import { useStore } from '../store';
+import { now as clockNow } from '../clock';
+import { MIN_COUNT, elapsedMs, totalMs } from '../timer';
 import { dayCounted, dayTasks, focusMinutes, taskDone } from '../logic';
 import { colorVar, sectionColor, Stepper } from '../components/ui';
 import { I } from '../components/icons';
@@ -16,29 +18,34 @@ export function Focus({ initial, onClose }: { initial: { section?: Section; task
   const [duration, setDuration] = useState(50);
   const [section, setSection] = useState<Section>(initial.section ?? 'QA');
   const [taskId, setTaskId] = useState<string | null>(initial.taskId ?? null);
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(clockNow());
   const [result, setResult] = useState<{ minutes: number; counted: boolean; short: boolean } | null>(null);
   const finishing = useRef(false);
 
   const tasks = useMemo(() => dayTasks(state, today).filter(t => !taskDone(state, t)), [state, today]);
 
   useEffect(() => {
-    const id = window.setInterval(() => setNow(Date.now()), 250);
+    const id = window.setInterval(() => setNow(clockNow()), 250);
     return () => clearInterval(id);
   }, []);
 
-  const elapsed = timer ? timer.elapsedBefore + (timer.runningSince ? now - timer.runningSince : 0) : 0;
-  const total = (timer?.durationMin ?? duration) * 60_000;
+  const elapsed = timer ? elapsedMs(timer, now) : 0;
+  const total = timer ? totalMs(timer) : duration * 60_000;
   const remaining = Math.max(0, total - elapsed);
   const running = !!timer?.runningSince;
 
-  /* keep the screen on while running */
+  /* keep the screen on while running; the browser drops the lock when the app is hidden, so take it again on return */
   useEffect(() => {
-    let lock: { release: () => Promise<void> } | null = null;
-    if (running && 'wakeLock' in navigator) {
-      (navigator as unknown as { wakeLock: { request: (t: string) => Promise<{ release: () => Promise<void> }> } }).wakeLock.request('screen').then(l => (lock = l)).catch(() => {});
-    }
-    return () => { lock?.release().catch(() => {}); };
+    if (!running || !('wakeLock' in navigator)) return;
+    type Lock = { release: () => Promise<void> };
+    const wl = (navigator as unknown as { wakeLock: { request: (t: string) => Promise<Lock> } }).wakeLock;
+    let lock: Lock | null = null;
+    let gone = false;
+    const take = () => { wl.request('screen').then(l => { if (gone) l.release().catch(() => {}); else lock = l; }).catch(() => {}); };
+    const onVis = () => { if (document.visibilityState === 'visible') take(); };
+    take();
+    document.addEventListener('visibilitychange', onVis);
+    return () => { gone = true; document.removeEventListener('visibilitychange', onVis); lock?.release().catch(() => {}); };
   }, [running]);
 
   const start = () => startTimer({ durationMin: duration, section, taskId });

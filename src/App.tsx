@@ -12,20 +12,25 @@ import { Focus } from './screens/Focus';
 import { TaskSheet, type TaskDraft } from './screens/TaskSheet';
 import { MenuSheet, ReflectionSheet, FutureNoteSheet } from './screens/Extras';
 import { Auth, Setup, Splash } from './screens/Gate';
+import { now as clockNow } from './clock';
+import { remainingMs } from './timer';
 
-function TimerPill({ onOpen }: { onOpen: () => void }) {
+function TimerPill({ onOpen, hidden }: { onOpen: () => void; hidden: boolean }) {
   const { state } = useStore();
   const t = state.timer;
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(clockNow());
   useEffect(() => {
     if (!t?.active) return;
-    const id = window.setInterval(() => setNow(Date.now()), 500);
+    const id = window.setInterval(() => setNow(clockNow()), 500);
     return () => clearInterval(id);
   }, [t?.active]);
-  if (!t?.active) return null;
-  const left = Math.max(0, t.durationMin * 60_000 - (t.elapsedBefore + (t.runningSince ? now - t.runningSince : 0)));
+  const left = t?.active ? remainingMs(t, now) : 0;
   const mm = String(Math.floor(left / 60_000)).padStart(2, '0');
   const ss = String(Math.floor((left % 60_000) / 1000)).padStart(2, '0');
+  /* the countdown in the browser tab title, for when this is a background tab on a laptop */
+  const title = t?.active && !t.review && t.runningSince ? `${mm}:${ss} · Focus` : t?.active && t.review ? 'Confirm session' : 'Ascent';
+  useEffect(() => { document.title = title; }, [title]);
+  if (!t?.active || hidden) return null;
   return (
     <button className="timer-pill" onClick={onOpen} aria-label="Open focus timer">
       <span className={`live ${t.runningSince && !t.review ? '' : 'paused'}`} />
@@ -83,7 +88,7 @@ function Shell() {
         {tab === 'mocks' && <Mocks />}
         {tab === 'insights' && <Insights />}
 
-        {!focus && <TimerPill onOpen={() => setFocus({})} />}
+        <TimerPill hidden={!!focus} onOpen={() => setFocus({})} />
         <div className="nav-fade" aria-hidden="true" />
         <nav className="nav" aria-label="Main">
           {nav(items[0])}
