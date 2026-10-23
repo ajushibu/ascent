@@ -1,0 +1,11 @@
+import sharp from 'sharp';
+import { readFileSync, writeFileSync } from 'node:fs';
+const svg = readFileSync('public/favicon.svg', 'utf8');
+const sq = svg.replace('rx="116"', 'rx="0"');
+const inner = sq.replace(/<svg[^>]*>/, '').replace('</svg>', '');
+const maskable = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" fill="#4B33E6"/><g transform="translate(51 51) scale(0.8)">${inner}</g></svg>`;
+const out = async (s, size, f) => writeFileSync(`public/${f}`, await sharp(Buffer.from(s)).resize(size, size).png({ compressionLevel: 9 }).toBuffer());
+await out(svg, 192, 'icon-192.png');
+await out(svg, 512, 'icon-512.png');
+await out(maskable, 512, 'icon-512-maskable.png');
+await out(sq, 180, 'apple-touch-icon.png');

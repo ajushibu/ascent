@@ -1,0 +1,84 @@
+import { useMemo, useState, type ReactNode } from 'react';
+import { StoreProvider, useStore } from './store';
+import { UiCtx, type Tab, type Ui } from './ui-context';
+import type { Section } from './types';
+import { I } from './components/icons';
+import { Toasts } from './components/ui';
+import { Today } from './screens/Today';
+import { Plan } from './screens/Plan';
+import { Mocks } from './screens/Mocks';
+import { Insights } from './screens/Insights';
+import { Focus } from './screens/Focus';
+import { TaskSheet, type TaskDraft } from './screens/TaskSheet';
+import { MenuSheet, ReflectionSheet, FutureNoteSheet } from './screens/Extras';
+import { Auth, Setup, Splash } from './screens/Gate';
+
+function Shell() {
+  const { state, ready, needsAuth } = useStore();
+  const [tab, setTab] = useState<Tab>('today');
+  const [focus, setFocus] = useState<{ section?: Section; taskId?: string | null } | null>(null);
+  const [menu, setMenu] = useState(false);
+  const [reflect, setReflect] = useState(false);
+  const [note, setNote] = useState(false);
+  const [task, setTask] = useState<TaskDraft | null>(null);
+
+  const ui = useMemo<Ui>(() => ({
+    tab, setTab,
+    openFocus: o => setFocus(o ?? {}),
+    openMenu: () => setMenu(true),
+    openReflection: () => setReflect(true),
+    openFutureNote: () => setNote(true),
+    openTask: d => setTask(d)
+  }), [tab]);
+
+  if (!ready) return <Splash />;
+  if (needsAuth) return <Auth />;
+  if (!state.settings.setupDone) return <><Setup /><Toasts /></>;
+
+  const items: { id: Tab; label: string; icon: ReactNode }[] = [
+    { id: 'today', label: 'Today', icon: <I.Home /> },
+    { id: 'plan', label: 'Plan', icon: <I.Calendar /> },
+    { id: 'mocks', label: 'Mocks', icon: <I.Paper /> },
+    { id: 'insights', label: 'Insights', icon: <I.Chart /> }
+  ];
+  const nav = (it: (typeof items)[number]) => (
+    <button key={it.id} className={`nav-item ${tab === it.id ? 'on' : ''}`} aria-current={tab === it.id ? 'page' : undefined} onClick={() => { setTab(it.id); window.scrollTo({ top: 0 }); }}>
+      {it.icon}<span>{it.label}</span>
+    </button>
+  );
+
+  return (
+    <UiCtx.Provider value={ui}>
+      <div className="app">
+        {tab === 'today' && <Today />}
+        {tab === 'plan' && <Plan />}
+        {tab === 'mocks' && <Mocks />}
+        {tab === 'insights' && <Insights />}
+
+        <div className="nav-fade" aria-hidden="true" />
+        <nav className="nav" aria-label="Main">
+          {nav(items[0])}
+          {nav(items[1])}
+          <button className="fab" aria-label="Start focus session" onClick={() => setFocus({})}><span><I.Play size={32} /></span></button>
+          {nav(items[2])}
+          {nav(items[3])}
+        </nav>
+      </div>
+
+      {focus && <Focus initial={focus} onClose={() => setFocus(null)} />}
+      <TaskSheet draft={task} onClose={() => setTask(null)} />
+      <MenuSheet open={menu} onClose={() => setMenu(false)} onNote={() => setNote(true)} onReflect={() => setReflect(true)} />
+      <ReflectionSheet open={reflect} onClose={() => setReflect(false)} />
+      <FutureNoteSheet open={note} onClose={() => setNote(false)} />
+      <Toasts />
+    </UiCtx.Provider>
+  );
+}
+
+export default function App() {
+  return (
+    <StoreProvider>
+      <Shell />
+    </StoreProvider>
+  );
+}
