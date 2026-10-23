@@ -4,7 +4,7 @@ import type { AppState, Goal, Mock, Reflection, Section, Settings, Task } from '
 
 import { emptyState, mergeState, normalizeState } from './merge';
 import { reconcile } from './reconcile';
-import { addDays, levelInfo, todayKey, xpTotal } from './logic';
+import { addDays, levelInfo, taskProgress, todayKey, weekDays, xpTotal } from './logic';
 import { hasBackend, supabase } from './supabase';
 import { buildDemo } from './demo';
 import { now as clockNow, syncClock } from './clock';
@@ -66,6 +66,10 @@ interface Store {
   signIn: (email: string, password: string) => Promise<string | null>;
   signUp: (email: string, password: string) => Promise<string | null>;
   signOut: () => Promise<void>;
+  /** true while the person has opened a password-reset link and must choose a new password */
+  recovering: boolean;
+  requestReset: (email: string) => Promise<string | null>;
+  setPassword: (password: string) => Promise<string | null>;
   completeSetup: (c: SetupConfig) => void;
   updateSettings: (p: Partial<Settings>) => void;
   addGoal: (g: Omit<Goal, 'id' | 'updatedAt' | 'order'>) => void;
@@ -104,6 +108,9 @@ export const useStore = () => {
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [auth, setAuth] = useState<AuthSession | null>(null);
   const [authChecked, setAuthChecked] = useState(!hasBackend);
+  const [recovering, setRecovering] = useState(false);
+  /* the user whose data has been loaded; until then the in-memory state is a placeholder and must not overwrite their saved copy */
+  const [loadedFor, setLoadedFor] = useState<string | null>(null);
   const userId = auth?.user?.id ?? null;
   const [state, setState] = useState<AppState>(() => loadCache(null));
   const [ready, setReady] = useState(!hasBackend);
@@ -133,19 +140,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setAuth(data.session);
       setAuthChecked(true);
     });
-    const { data } = supabase.auth.onAuthStateChange((_e, s) => setAuth(s));
+    const { data } = supabase.auth.onAuthStateChange((event, s) => {
+      if (event === 'PASSWORD_RECOVERY') setRecovering(true);
+      setAuth(s);
+    });
     return () => data.subscription.unsubscribe();
   }, []);
 
   /* local cache */
   useEffect(() => {
-    if (hasBackend && !userId) return;
+    // Without this guard the empty placeholder state written at app start replaced the saved copy before it was read,
+    // losing anything that had not synced yet (for example changes made offline).
+    if (hasBackend && (!userId || loadedFor !== userId)) return;
     try {
       localStorage.setItem(cacheKey(userId), JSON.stringify(state));
     } catch {
       /* storage full or blocked — sync still works */
     }
-  }, [state, userId]);
+  }, [state, userId, loadedFor]);
 
   /* theme */
   useEffect(() => {
@@ -210,6 +222,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (cancelled) return;
         const merged = reconcile(remote ? mergeState(local, remote) : local).state;
         setState(merged);
+        setLoadedFor(userId);
         setReady(true);
         const { error } = await supabase!.from('user_state').upsert({ user_id: userId, data: merged, updated_at: new Date().toISOString() });
         if (error) throw error;
@@ -217,6 +230,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       } catch {
         if (cancelled) return;
         setState(local);
+        setLoadedFor(userId);
         setReady(true);
         setSync(navigator.onLine ? 'error' : 'offline');
       }
@@ -279,7 +293,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [commit]
   );
 
-  const api = useMemo<Omit<Store, 'state' | 'today' | 'ready' | 'user' | 'needsAuth' | 'sync' | 'toast' | 'dismissToast'>>(
+  const api = useMemo<Omit<Store, 'state' | 'today' | 'ready' | 'user' | 'needsAuth' | 'recovering' | 'sync' | 'toast' | 'dismissToast'>>(
     () => ({
       signIn: async (email, password) => {
         if (!supabase) return 'Backend not configured';
@@ -295,21 +309,34 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
       signOut: async () => {
         await supabase?.auth.signOut();
+        setLoadedFor(null);
         setState(emptyState());
         setReady(!hasBackend);
+      },
+      requestReset: async email => {
+        if (!supabase) return 'Backend not configured';
+        const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
+        return error?.message ?? null;
+      },
+      setPassword: async password => {
+        if (!supabase) return 'Backend not configured';
+        const { error } = await supabase.auth.updateUser({ password });
+        if (!error) setRecovering(false);
+        return error?.message ?? null;
       },
       completeSetup: c =>
         commit(s => {
           const now = Date.now();
-          const mk = (order: number, g: Omit<Goal, 'id' | 'updatedAt' | 'order'>): Goal => ({ ...g, id: uid(), order, updatedAt: now });
+          // fixed ids: finishing setup on two devices (e.g. one offline) updates the same goals instead of duplicating them
+          const mk = (order: number, g: Omit<Goal, 'id' | 'updatedAt' | 'order'>, id: string): Goal => ({ ...g, id, order, updatedAt: now });
           const goals: Goal[] = [
-            mk(0, { label: 'Mocks', unit: 'mocks', total: c.mocks, section: 'ALL', xpPerUnit: 0, step: 1, fromMocks: true }),
-            mk(1, { label: 'DI sets', unit: 'sets', total: c.diSets, section: 'DILR', xpPerUnit: 25, step: 1 }),
-            mk(2, { label: `Quant revision · ${c.rounds} ${c.rounds === 1 ? 'round' : 'rounds'}`, unit: 'topics', total: c.topicsPerRound * c.rounds, section: 'QA', xpPerUnit: 20, step: 1 })
+            mk(0, { label: 'Mocks', unit: 'mocks', total: c.mocks, section: 'ALL', xpPerUnit: 0, step: 1, fromMocks: true }, 'goal:mocks'),
+            mk(1, { label: 'DI sets', unit: 'sets', total: c.diSets, section: 'DILR', xpPerUnit: 25, step: 1 }, 'goal:di'),
+            mk(2, { label: `Quant revision · ${c.rounds} ${c.rounds === 1 ? 'round' : 'rounds'}`, unit: 'topics', total: c.topicsPerRound * c.rounds, section: 'QA', xpPerUnit: 20, step: 1 }, 'goal:quant')
           ];
           return {
             ...s,
-            goals: [...s.goals.filter(g => g.deleted), ...goals],
+            goals: [...s.goals.filter(g => g.deleted && !goals.some(n => n.id === g.id)), ...goals],
             settings: { ...s.settings, name: c.name, examDate: c.examDate, startDate: todayKey(), targetPercentile: c.targetPercentile, minDayMinutes: c.minDayMinutes, setupDone: true, updatedAt: now }
           };
         }),
@@ -348,16 +375,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         })),
       logProgress: (task, amount) =>
         commit(
-          s => ({
-            ...s,
-            entries: [...s.entries, { id: uid(), dateKey: entryDate(task), goalId: task.goalId, taskId: task.scope === 'week' && task.goalId ? null : task.id, amount, ts: Date.now(), updatedAt: Date.now() }]
-          }),
+          s => {
+            // never log more than what is left: tapping a finished goal again, or a step bigger than the remainder,
+            // must not inflate totals and XP
+            const left = task.target - taskProgress(s, task);
+            const a = Math.round(Math.min(amount, left) * 100) / 100;
+            if (!(a > 0)) return s;
+            return {
+              ...s,
+              entries: [...s.entries, { id: uid(), dateKey: entryDate(task), goalId: task.goalId, taskId: task.scope === 'week' && task.goalId ? null : task.id, amount: a, ts: Date.now(), updatedAt: Date.now() }]
+            };
+          },
           { toast: 'Logged' }
         ),
       undoProgress: task =>
         commit(s => {
+          // a weekly goal undoes the latest entry that counted toward that week, never one from another week
+          const days = new Set(task.scope === 'week' ? weekDays(task.key) : []);
           const rel = s.entries
-            .filter(e => !e.deleted && !e.id.startsWith('mock:') && (task.scope === 'week' && task.goalId ? e.goalId === task.goalId : e.taskId === task.id))
+            .filter(e => !e.deleted && !e.id.startsWith('mock:') && (task.scope === 'week' && task.goalId ? e.goalId === task.goalId && days.has(e.dateKey) : e.taskId === task.id))
             .sort((a, b) => b.ts - a.ts)[0];
           return rel ? { ...s, entries: s.entries.map(e => (e.id === rel.id ? stamp({ ...e, deleted: true }) : e)) } : s;
         }),
@@ -457,6 +493,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [commit]
   );
   useEffect(() => {
+    if (ready) syncClock(true);
+  }, [ready, userId]);
+  useEffect(() => {
     if (!ready) return;
     const check = () => {
       const t = stateRef.current.timer;
@@ -466,7 +505,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       else if (a.kind === 'review') setReview(t.id, a.max);
       else discardTimer();
     };
-    syncClock(true).then(check);
+    syncClock().then(check);
     const t = state.timer;
     const left = t?.active && t.runningSince && !t.review ? t.durationMin * 60_000 - elapsedMs(t, clockNow()) : null;
     const id = left != null ? window.setTimeout(check, Math.max(0, left) + 300) : null;
@@ -494,6 +533,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     ready: ready && authChecked,
     user: auth?.user ?? null,
     needsAuth: hasBackend && authChecked && !auth,
+    recovering,
     sync,
     toast,
     dismissToast: () => setToast(null),

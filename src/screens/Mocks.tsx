@@ -103,6 +103,8 @@ function MockSheet({ initial, onClose }: { initial: Form | 'new'; onClose: () =>
 
   const save = () => {
     if (!f) return;
+    // a mistyped or cleared date would file the mock under a day that doesn't exist (or the future)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(f.dateKey) || f.dateKey > today) { setErr('Pick the date you took the mock (not in the future).'); return; }
     saveMock({ id: f.id, name: f.name.trim() || `Mock ${mocksOf(state).length + 1}`, dateKey: f.dateKey, overall: fromF(f.overall), varc: fromF(f.varc), dilr: fromF(f.dilr), qa: fromF(f.qa), notes: f.notes, analysed: f.analysed });
     onClose();
   };
@@ -126,7 +128,7 @@ function MockSheet({ initial, onClose }: { initial: Form | 'new'; onClose: () =>
           {fromImage && <p className="hint" style={{ background: 'var(--gold-soft)', padding: '12px 14px', borderRadius: 16, color: 'var(--ink-2)' }}>Read from your screenshot. Compare against the original before saving, since photos of screens can misread digits.</p>}
           <div className="two">
             <div className="field"><label htmlFor="mn">Name</label><input id="mn" className="input" value={f.name} onChange={e => setForm({ ...f, name: e.target.value })} placeholder="Mock name" /></div>
-            <div className="field"><label htmlFor="md">Date</label><input id="md" type="date" className="input" value={f.dateKey} onChange={e => setForm({ ...f, dateKey: e.target.value })} /></div>
+            <div className="field"><label htmlFor="md">Date</label><input id="md" type="date" className="input" max={today} value={f.dateKey} onChange={e => setForm({ ...f, dateKey: e.target.value })} /></div>
           </div>
           {([['overall', 'Overall', 'var(--ink)'], ['varc', 'VARC', 'var(--varc)'], ['dilr', 'DILR', 'var(--dilr)'], ['qa', 'Quant', 'var(--qa)']] as const).map(([k, label, c]) => (
             <div key={k} className="field" style={colorVar(c)}>

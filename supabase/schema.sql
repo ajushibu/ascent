@@ -20,3 +20,8 @@ create policy "own row: update" on public.user_state for update using (auth.uid(
 
 -- Live updates between your phone, iPad and laptop.
 alter publication supabase_realtime add table public.user_state;
+
+-- Trusted clock for the focus timer, so a phone with a wrong clock can't log wrong minutes.
+create or replace function public.server_time() returns timestamptz
+  language sql stable as $$ select now() $$;
+grant execute on function public.server_time() to anon, authenticated;

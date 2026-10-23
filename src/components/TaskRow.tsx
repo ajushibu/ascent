@@ -20,7 +20,7 @@ export function TaskRow({ task, onEdit }: { task: Task; onEdit?: (t: Task) => vo
         className={`check ${done ? 'done' : prog > 0 ? 'part' : ''}`}
         aria-label={done ? 'Undo' : 'Mark progress'}
         disabled={auto}
-        onClick={() => { if (auto) return; if (done && task.target <= 1) undoProgress(task); else logProgress(task, Math.min(unitStep, Math.max(unitStep, task.target - prog))); }}
+        onClick={() => { if (auto) return; if (done) undoProgress(task); else logProgress(task, unitStep); }}
       >
         <I.Check size={20} />
       </button>

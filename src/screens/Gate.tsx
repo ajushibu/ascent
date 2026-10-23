@@ -9,8 +9,9 @@ export function Splash() {
 }
 
 export function Auth() {
-  const { signIn, signUp } = useStore();
+  const { signIn, signUp, requestReset } = useStore();
   const [mode, setMode] = useState<'in' | 'up'>('in');
+  const [info, setInfo] = useState('');
   const [email, setEmail] = useState('');
   const [pw, setPw] = useState('');
   const [msg, setMsg] = useState('');
@@ -34,8 +35,49 @@ export function Auth() {
           <div className="field"><label htmlFor="em">Email</label><input id="em" className="input" type="email" autoComplete="email" required value={email} onChange={e => setEmail(e.target.value)} /></div>
           <div className="field"><label htmlFor="pw">Password</label><input id="pw" className="input" type="password" autoComplete={mode === 'in' ? 'current-password' : 'new-password'} minLength={6} required value={pw} onChange={e => setPw(e.target.value)} /></div>
           {msg && <p className="err" role="alert">{msg}</p>}
+          {info && <p className="hint" role="status">{info}</p>}
           <button className="btn" type="submit" disabled={busy}>{busy ? 'One moment…' : mode === 'in' ? 'Sign in' : 'Create account'}</button>
-          <button type="button" className="btn-link" onClick={() => { setMode(mode === 'in' ? 'up' : 'in'); setMsg(''); }}>{mode === 'in' ? 'New here? Create an account' : 'Have an account? Sign in'}</button>
+          {mode === 'in' && (
+            <button type="button" className="btn-link" disabled={busy} onClick={async () => {
+              setMsg(''); setInfo('');
+              if (!email.trim()) { setMsg('Type your email above first.'); return; }
+              setBusy(true);
+              const err = await requestReset(email.trim());
+              setBusy(false);
+              if (err) setMsg(err); else setInfo('Check your inbox for a link to choose a new password.');
+            }}>Forgot password?</button>
+          )}
+          <button type="button" className="btn-link" onClick={() => { setMode(mode === 'in' ? 'up' : 'in'); setMsg(''); setInfo(''); }}>{mode === 'in' ? 'New here? Create an account' : 'Have an account? Sign in'}</button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+export function NewPassword() {
+  const { setPassword } = useStore();
+  const [pw, setPw] = useState('');
+  const [msg, setMsg] = useState('');
+  const [busy, setBusy] = useState(false);
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    setBusy(true); setMsg('');
+    const err = await setPassword(pw);
+    setBusy(false);
+    if (err) setMsg(err);
+  };
+  return (
+    <div className="app">
+      <div className="auth">
+        <form className="card wash stack" style={{ gap: 18 }} onSubmit={submit}>
+          <span className="logo"><I.Rocket size={32} /></span>
+          <div>
+            <h1 className="h1">New password</h1>
+            <p className="body" style={{ marginTop: 8 }}>Choose a new password. Anyone sharing this login will need to use it too.</p>
+          </div>
+          <div className="field"><label htmlFor="npw">Password</label><input id="npw" className="input" type="password" autoComplete="new-password" minLength={6} required value={pw} onChange={e => setPw(e.target.value)} /></div>
+          {msg && <p className="err" role="alert">{msg}</p>}
+          <button className="btn" type="submit" disabled={busy}>{busy ? 'One moment…' : 'Save password'}</button>
         </form>
       </div>
     </div>

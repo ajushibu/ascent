@@ -11,7 +11,7 @@ import { Insights } from './screens/Insights';
 import { Focus } from './screens/Focus';
 import { TaskSheet, type TaskDraft } from './screens/TaskSheet';
 import { MenuSheet, ReflectionSheet, FutureNoteSheet } from './screens/Extras';
-import { Auth, Setup, Splash } from './screens/Gate';
+import { Auth, NewPassword, Setup, Splash } from './screens/Gate';
 import { now as clockNow } from './clock';
 import { remainingMs } from './timer';
 
@@ -41,7 +41,7 @@ function TimerPill({ onOpen, hidden }: { onOpen: () => void; hidden: boolean }) 
 }
 
 function Shell() {
-  const { state, ready, needsAuth } = useStore();
+  const { state, ready, needsAuth, recovering } = useStore();
   const [tab, setTab] = useState<Tab>('today');
   const [focus, setFocus] = useState<{ section?: Section; taskId?: string | null } | null>(null);
   const [menu, setMenu] = useState(false);
@@ -64,6 +64,7 @@ function Shell() {
     if (reviewId) setFocus({});
   }, [reviewId]);
 
+  if (recovering) return <NewPassword />;
   if (!ready) return <Splash />;
   if (needsAuth) return <Auth />;
   if (!state.settings.setupDone) return <><Setup /><Toasts /></>;
