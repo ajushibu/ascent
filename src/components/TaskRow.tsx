@@ -11,6 +11,7 @@ export function TaskRow({ task, onEdit }: { task: Task; onEdit?: (t: Task) => vo
   const done = taskDone(state, task);
   const step = goal?.step ?? 1;
   const unitStep = task.target <= 1 ? 1 : step;
+  const auto = !!goal?.fromMocks; // filled by logging mocks, never by hand
 
   return (
     <div className="task" style={colorVar(sectionColor(task.section))}>
@@ -18,7 +19,8 @@ export function TaskRow({ task, onEdit }: { task: Task; onEdit?: (t: Task) => vo
         type="button"
         className={`check ${done ? 'done' : prog > 0 ? 'part' : ''}`}
         aria-label={done ? 'Undo' : 'Mark progress'}
-        onClick={() => (done && task.target <= 1 ? undoProgress(task) : logProgress(task, Math.min(unitStep, Math.max(unitStep, task.target - prog))))}
+        disabled={auto}
+        onClick={() => { if (auto) return; if (done && task.target <= 1) undoProgress(task); else logProgress(task, Math.min(unitStep, Math.max(unitStep, task.target - prog))); }}
       >
         <I.Check size={20} />
       </button>
@@ -26,13 +28,13 @@ export function TaskRow({ task, onEdit }: { task: Task; onEdit?: (t: Task) => vo
         <div className={`t ${done ? 'done' : ''}`}>{task.title}</div>
         <div className="s">
           {fmtNum(prog)} / {fmtNum(task.target)} {task.unit}
-          {task.scope === 'week' && task.goalId ? ' · auto from daily work' : ''}
+          {auto ? ' · fills when you log a mock' : task.scope === 'week' && task.goalId ? ' · auto from daily work' : ''}
         </div>
       </button>
-      {task.target > 1 && !done && (
+      {!auto && task.target > 1 && !done && (
         <button type="button" className="mini-btn" aria-label={`Add ${fmtNum(unitStep)}`} onClick={() => logProgress(task, unitStep)}><I.Plus size={20} /></button>
       )}
-      {prog > 0 && task.target > 1 && (
+      {!auto && prog > 0 && task.target > 1 && (
         <button type="button" className="mini-btn plain" aria-label="Undo last" onClick={() => undoProgress(task)}><I.Undo size={20} /></button>
       )}
     </div>

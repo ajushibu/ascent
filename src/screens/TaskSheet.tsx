@@ -15,7 +15,9 @@ const SECTIONS: Section[] = ['QA', 'DILR', 'VARC', 'ALL'];
 
 export function TaskSheet({ draft, onClose }: { draft: TaskDraft | null; onClose: () => void }) {
   const { state, addTask, updateTask, deleteTask } = useStore();
-  const goals = goalsOf(state).filter(g => !g.fromMocks);
+  const isWeek = draft?.scope === 'week';
+  /* Mocks can only be linked from weekly goals: progress is counted from the mocks logged that week. */
+  const goals = goalsOf(state).filter(g => isWeek || !g.fromMocks);
   const [title, setTitle] = useState('');
   const [goalId, setGoalId] = useState<string | null>(null);
   const [target, setTarget] = useState(1);
@@ -67,7 +69,7 @@ export function TaskSheet({ draft, onClose }: { draft: TaskDraft | null; onClose
               {goals.map(g => (
                 <button key={g.id} type="button" className={`chip ${goalId === g.id ? 'on' : ''}`} style={colorVar(sectionColor(g.section))} onClick={() => { pickGoal(g.id); setTarget(week ? Math.max(1, Math.round(g.total / 6)) : g.step || 1); }}>{g.label.split(' · ')[0]}</button>
               ))}
-              <button type="button" className="chip" onClick={() => preset('Full mock', 'ALL', 'mock', 1)}>Full mock</button>
+              <button type="button" className="chip" onClick={() => { const m = goals.find(g => g.fromMocks); if (week && m) { pickGoal(m.id); setTitle('Full mock'); setTarget(1); } else preset('Full mock', 'ALL', 'mock', 1); }}>Full mock</button>
               <button type="button" className="chip" onClick={() => preset('Mock analysis', 'ALL', 'mock', 1)}>Mock analysis</button>
             </div>
           </div>
@@ -82,7 +84,7 @@ export function TaskSheet({ draft, onClose }: { draft: TaskDraft | null; onClose
             <option value="">Nothing — just a task</option>
             {goals.map(g => <option key={g.id} value={g.id}>{g.label}</option>)}
           </select>
-          <p className="hint">{goal ? 'Progress here moves your total goal and earns XP.' : 'Not linked to a total goal — it won’t earn per-unit XP, but finishing it still counts.'}</p>
+          <p className="hint">{goal?.fromMocks ? 'Fills itself when you log a mock on the Mocks tab this week.' : goal ? 'Progress here moves your total goal and earns XP.' : 'Not linked to a total goal — it won’t earn per-unit XP, but finishing it still counts.'}</p>
         </div>
         <div className="two">
           <div className="field">
