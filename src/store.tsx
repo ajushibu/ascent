@@ -3,6 +3,7 @@ import type { Session as AuthSession } from '@supabase/supabase-js';
 import type { AppState, Goal, Mock, Reflection, Section, Settings, Task } from './types';
 
 export const MIN_COUNT = 5; // minutes needed for a focus session to count
+const LATE_GRACE_MS = 90_000; // a timer that ends while the app is open and awake is logged straight away
 const PAUSED_LIMIT_MS = 3 * 3_600_000; // a timer left paused this long is ended and logs what was done
 import { emptyState, mergeState, normalizeState } from './merge';
 import { reconcile } from './reconcile';
@@ -81,6 +82,9 @@ interface Store {
   resumeTimer: () => void;
   /** Ends the running timer (on any device) and logs the session once. null if nothing is running. */
   finishTimer: () => { minutes: number; counted: boolean } | null;
+  /** For a timer that ended while away: log the time the person says they actually studied. */
+  confirmTimer: (minutes: number) => { minutes: number; counted: boolean } | null;
+  discardTimer: () => void;
   saveMock: (m: Omit<Mock, 'updatedAt' | 'id'> & { id?: string }) => void;
   deleteMock: (id: string) => void;
   saveReflection: (r: Omit<Reflection, 'id' | 'updatedAt'>) => void;
@@ -381,6 +385,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         );
         return { minutes, counted };
       },
+      confirmTimer: minutes => {
+        const t = stateRef.current.timer;
+        if (!t?.active || !t.review) return null;
+        const m = Math.max(MIN_COUNT, Math.min(t.review.max, Math.round(minutes)));
+        const now = Date.now();
+        const sid = `timer:${t.id}`;
+        commit(
+          s => ({
+            ...s,
+            timer: { ...t, active: false, runningSince: null, review: null, updatedAt: now },
+            sessions: s.sessions.some(x => x.id === sid) ? s.sessions : [...s.sessions, { id: sid, dateKey: todayKey(new Date(t.startedAt)), startedAt: t.startedAt, minutes: m, section: t.section, taskId: t.taskId, updatedAt: now }]
+          }),
+          { toast: `${m} min logged` }
+        );
+        return { minutes: m, counted: true };
+      },
+      discardTimer: () =>
+        commit(s => (s.timer?.active ? { ...s, timer: { ...s.timer, active: false, runningSince: null, review: null, updatedAt: Date.now() } } : s)),
       saveMock: m =>
         commit(
           s => {
@@ -426,16 +448,28 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   /* A timer must end by itself: when its time is up, or if it was left paused for hours.
      This lives here (not in the timer screen) so it also works when the app was closed or the phone was locked:
      the full time is credited the moment the app is next open. */
-  const finishTimer = api.finishTimer;
+  const { finishTimer, discardTimer } = api;
+  const setReview = (t: NonNullable<AppState['timer']>, max: number) =>
+    commit(s => (s.timer?.id === t.id && s.timer.active && !s.timer.review ? { ...s, timer: { ...s.timer, runningSince: null, elapsedBefore: max * 60_000, review: { max }, updatedAt: Date.now() } } : s));
   useEffect(() => {
     if (!ready) return;
     const check = () => {
       const t = stateRef.current.timer;
-      if (!t?.active) return;
+      if (!t?.active || t.review) return;
       const now = Date.now();
       const el = t.elapsedBefore + (t.runningSince ? now - t.runningSince : 0);
-      const stale = !t.runningSince && now - t.updatedAt > PAUSED_LIMIT_MS;
-      if (el >= t.durationMin * 60_000 - 500 || stale) finishTimer();
+      const total = t.durationMin * 60_000;
+      if (t.runningSince && el >= total - 500) {
+        // Ended while someone was looking: log it. Ended while the app was closed or the phone locked: we can't know
+        // whether they studied, so they confirm how long they really did (never a silent, possibly fake entry).
+        const lateMs = el - total;
+        if (lateMs <= LATE_GRACE_MS && document.visibilityState !== 'hidden') finishTimer();
+        else setReview(t, t.durationMin);
+      } else if (!t.runningSince && now - t.updatedAt > PAUSED_LIMIT_MS) {
+        const max = Math.floor(t.elapsedBefore / 60_000);
+        if (max >= MIN_COUNT) setReview(t, max);
+        else discardTimer(); // too short to count
+      }
     };
     check();
     const t = state.timer;
@@ -453,7 +487,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       window.removeEventListener('pageshow', wake);
       window.removeEventListener('focus', wake);
     };
-  }, [ready, state.timer, finishTimer]);
+  }, [ready, state.timer, finishTimer, discardTimer]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const value: Store = {
     state,

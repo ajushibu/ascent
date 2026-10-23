@@ -28,9 +28,9 @@ function TimerPill({ onOpen }: { onOpen: () => void }) {
   const ss = String(Math.floor((left % 60_000) / 1000)).padStart(2, '0');
   return (
     <button className="timer-pill" onClick={onOpen} aria-label="Open focus timer">
-      <span className={`live ${t.runningSince ? '' : 'paused'}`} />
-      <span className="time">{mm}:{ss}</span>
-      <span className="what">{t.runningSince ? 'Focus' : 'Paused'}</span>
+      <span className={`live ${t.runningSince && !t.review ? '' : 'paused'}`} />
+      <span className="time">{t.review ? 'Confirm' : `${mm}:${ss}`}</span>
+      <span className="what">{t.review ? 'Session' : t.runningSince ? 'Focus' : 'Paused'}</span>
     </button>
   );
 }
@@ -52,6 +52,12 @@ function Shell() {
     openFutureNote: () => setNote(true),
     openTask: d => setTask(d)
   }), [tab]);
+
+  /* a timer that ended while away asks how long you really studied: open that screen straight away */
+  const reviewId = state.timer?.active && state.timer.review ? state.timer.id : null;
+  useEffect(() => {
+    if (reviewId) setFocus({});
+  }, [reviewId]);
 
   if (!ready) return <Splash />;
   if (needsAuth) return <Auth />;

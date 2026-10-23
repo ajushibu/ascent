@@ -110,6 +110,8 @@ export interface FocusTimer {
   durationMin: number;
   section: Section;
   taskId: string | null;
+  /** Set when the timer ended while nobody was looking: the time is only logged after the person confirms how long they really studied. */
+  review?: { max: number } | null;
   updatedAt: number;
 }
 

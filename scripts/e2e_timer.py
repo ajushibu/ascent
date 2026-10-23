@@ -37,23 +37,31 @@ with sync_playwright() as p:
     assert not errs, errs
     b.close()
 
-    # 2. phone locked: the page's timers never fire, the clock just jumps; the session logs when the app wakes up
-    b, page, errs = boot(p)
-    start_and_leave(page)
-    page.clock.set_system_time(T0 + d.timedelta(minutes=55))
-    page.reload(wait_until='networkidle'); page.wait_for_timeout(600)
-    assert focus_minutes(page) == [50], focus_minutes(page)       # full 50, not 55
-    expect(page.locator('.timer-pill')).to_have_count(0)
-    assert not errs, errs
-    b.close()
+    # 2. phone locked / app closed: nothing is logged silently, the person confirms what they really did
+    for label, act, want in [('confirm', lambda pg: pg.get_by_role('button', name='Log 50 min').click(), [50]),
+                             ('adjust', lambda pg: (pg.get_by_label('decrease').click(), pg.get_by_role('button', name='Log 45 min').click()), [45]),
+                             ('discard', lambda pg: pg.get_by_role('button', name='I didn’t study — discard').click(), [])]:
+        b, page, errs = boot(p)
+        start_and_leave(page)
+        page.clock.set_system_time(T0 + d.timedelta(minutes=55))
+        page.reload(wait_until='networkidle'); page.wait_for_timeout(600)
+        assert focus_minutes(page) == [], (label, focus_minutes(page))          # nothing logged on its own
+        expect(page.get_by_text('Your timer ended while you were away')).to_be_visible()
+        act(page); page.wait_for_timeout(400)
+        assert focus_minutes(page) == want, (label, focus_minutes(page))
+        expect(page.locator('.timer-pill')).to_have_count(0)
+        assert not errs, errs
+        b.close()
 
-    # 3. paused and forgotten for 4 hours: ends and logs only what was actually done
+    # 3. paused and forgotten for 4 hours: only the 12 minutes actually done can be logged
     b, page, errs = boot(p)
     start_and_leave(page)
-    page.clock.fast_forward('12:00')                 # 12 minutes of focus
+    page.clock.fast_forward('12:00')
     page.locator('.timer-pill').click(); page.get_by_role('button', name='Pause').click(); page.get_by_label('Close').click()
     page.clock.set_system_time(T0 + d.timedelta(hours=4))
     page.reload(wait_until='networkidle'); page.wait_for_timeout(600)
+    assert focus_minutes(page) == []
+    page.get_by_role('button', name='Log 12 min').click(); page.wait_for_timeout(400)
     assert focus_minutes(page) == [12], focus_minutes(page)
     assert not errs, errs
     b.close()

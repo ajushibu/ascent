@@ -9,7 +9,8 @@ import { I } from '../components/icons';
 const SECTIONS: Section[] = ['QA', 'DILR', 'VARC', 'ALL'];
 
 export function Focus({ initial, onClose }: { initial: { section?: Section; taskId?: string | null }; onClose: () => void }) {
-  const { state, today, startTimer, pauseTimer, resumeTimer, finishTimer } = useStore();
+  const { state, today, startTimer, pauseTimer, resumeTimer, finishTimer, confirmTimer, discardTimer } = useStore();
+  const [revMin, setRevMin] = useState<number | null>(null);
   /* the timer lives in the synced state, so it is the same one on every device */
   const timer = state.timer?.active ? state.timer : null;
   const [duration, setDuration] = useState(50);
@@ -78,6 +79,31 @@ export function Focus({ initial, onClose }: { initial: { section?: Section; task
     const a = (i / N) * 2 * Math.PI - Math.PI / 2;
     return { x: 180 + R * Math.cos(a), y: 180 + R * Math.sin(a), on: i < Math.round(ratio * N) };
   });
+
+  /* ── the timer ended while nobody was looking: only log what was really studied ── */
+  if (timer?.review && !result) {
+    const max = timer.review.max;
+    const val = Math.min(max, revMin ?? max);
+    return (
+      <div className="fullscreen focus" style={colorVar(sectionColor(timer.section))}>
+        <div className="inner" style={{ justifyContent: 'center', textAlign: 'center' }}>
+          <div className="stack" style={{ alignItems: 'center', gap: 18 }}>
+            <span className="ico-bubble lg" style={{ ...colorVar('var(--gold)'), width: 84, height: 84, borderRadius: 42 }}><I.Clock size={40} /></span>
+            <h1 className="h1">Your timer ended while you were away</h1>
+            <p className="body">It was set for {timer.durationMin} minutes. Log only the time you really spent studying.</p>
+            <div className="field" style={{ alignItems: 'center' }}>
+              <label>Minutes studied</label>
+              <Stepper value={val} onChange={setRevMin} min={MIN_COUNT} max={max} step={5} />
+            </div>
+          </div>
+          <div className="stack" style={{ marginTop: 32 }}>
+            <button className="btn" onClick={() => { const r = confirmTimer(val); if (r) setResult({ minutes: r.minutes, counted: true, short: false }); }}>Log {val} min</button>
+            <button className="btn ghost" onClick={() => { discardTimer(); onClose(); }}>I didn’t study — discard</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   /* ── summary ── */
   if (result) {
