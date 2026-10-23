@@ -3,7 +3,7 @@ import type { Session as AuthSession } from '@supabase/supabase-js';
 import type { AppState, Goal, Mock, Reflection, Section, Settings, Task } from './types';
 import { emptyState, mergeState, normalizeState } from './merge';
 import { reconcile } from './reconcile';
-import { levelInfo, todayKey, xpTotal } from './logic';
+import { addDays, levelInfo, todayKey, xpTotal } from './logic';
 import { hasBackend, supabase } from './supabase';
 import { buildDemo } from './demo';
 
@@ -30,6 +30,12 @@ export interface SetupConfig {
 
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now().toString(36));
 const stamp = <T extends object>(x: T): T & { updatedAt: number } => ({ ...x, updatedAt: Date.now() });
+/** Progress is dated to when the work was done: today, unless the goal belongs to a day/week that is already over. */
+const entryDate = (t: Task) => {
+  const today = todayKey();
+  const end = t.scope === 'day' ? t.key : addDays(t.key, 6);
+  return today > end ? end : today;
+};
 const cacheKey = (userId: string | null) => `ascent:state:v1:${userId ?? 'local'}`;
 
 function loadCache(userId: string | null): AppState {
@@ -290,18 +296,29 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         commit(s => ({ ...s, tasks: [...s.tasks, { ...t, id, updatedAt: Date.now() }] }));
         return id;
       },
-      updateTask: (id, p) => commit(s => ({ ...s, tasks: s.tasks.map(t => (t.id === id ? stamp({ ...t, ...p }) : t)) })),
+      updateTask: (id, p) =>
+        commit(s => {
+          const old = s.tasks.find(t => t.id === id);
+          const moved = old && 'goalId' in p && p.goalId !== old.goalId;
+          return {
+            ...s,
+            tasks: s.tasks.map(t => (t.id === id ? stamp({ ...t, ...p }) : t)),
+            // moving a goal to another total carries its progress along
+            entries: moved ? s.entries.map(e => (e.taskId === id && !e.deleted ? stamp({ ...e, goalId: p.goalId ?? null }) : e)) : s.entries
+          };
+        }),
       deleteTask: id =>
         commit(s => ({
           ...s,
           tasks: s.tasks.map(t => (t.id === id ? stamp({ ...t, deleted: true }) : t)),
-          entries: s.entries.map(e => (e.taskId === id ? stamp({ ...e, deleted: true }) : e))
+          // work already done stays in your totals; only progress that fed nothing is dropped
+          entries: s.entries.map(e => (e.taskId === id && !e.goalId ? stamp({ ...e, deleted: true }) : e))
         })),
       logProgress: (task, amount) =>
         commit(
           s => ({
             ...s,
-            entries: [...s.entries, { id: uid(), dateKey: todayKey(), goalId: task.goalId, taskId: task.scope === 'week' && task.goalId ? null : task.id, amount, ts: Date.now(), updatedAt: Date.now() }]
+            entries: [...s.entries, { id: uid(), dateKey: entryDate(task), goalId: task.goalId, taskId: task.scope === 'week' && task.goalId ? null : task.id, amount, ts: Date.now(), updatedAt: Date.now() }]
           }),
           { toast: 'Logged' }
         ),

@@ -63,7 +63,7 @@ export function GoalSheet({ draft, onClose }: { draft: GoalDraft | null; onClose
         )}
         {g?.fromMocks && <p className="hint">Progress here comes from the mocks you log on the Mocks tab.</p>}
         <button className="btn" onClick={save}>{g ? 'Save changes' : 'Add goal'}</button>
-        {g && !g.fromMocks && <button className="btn ghost" onClick={() => { deleteGoal(g.id); onClose(); }}>Delete goal</button>}
+        {g && !g.fromMocks && <button className="btn ghost" onClick={() => { if (confirm('Delete this total? Your daily and weekly goals stay, but they stop counting toward it.')) { deleteGoal(g.id); onClose(); } }}>Delete goal</button>}
       </div>
     </Sheet>
   );

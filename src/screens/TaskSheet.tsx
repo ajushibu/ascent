@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { Section, Task } from '../types';
 import { SECTION_LABEL } from '../types';
 import { useStore } from '../store';
-import { goalsOf } from '../logic';
+import { daysBetween, goalDone, goalsOf } from '../logic';
 import { Sheet, Stepper, colorVar, sectionColor } from '../components/ui';
 
 export interface TaskDraft {
@@ -38,12 +38,22 @@ export function TaskSheet({ draft, onClose }: { draft: TaskDraft | null; onClose
   const goal = goals.find(g => g.id === goalId) ?? null;
   const week = draft.scope === 'week';
 
+  /** A sensible default: what it takes per week / per day to finish the total by exam day. */
+  const suggest = (g: { id: string; total: number; step: number }) => {
+    const left = Math.max(0, g.total - goalDone(state, g.id));
+    const span = Math.max(1, daysBetween(draft.key, state.settings.examDate) + 1);
+    const per = draft.scope === 'week' ? Math.ceil(left / Math.max(1, Math.ceil(span / 7))) : Math.ceil(left / span);
+    const step = g.step || 1;
+    return Math.max(step, Math.ceil(per / step) * step);
+  };
+
   const pickGoal = (id: string | null) => {
     setGoalId(id);
     const g = goals.find(x => x.id === id);
     if (g) {
       setSection(g.section);
       setUnit(g.unit);
+      if (!draft.task) setTarget(suggest(g));
       if (!title.trim() || goals.some(x => x.label === title)) setTitle(g.label);
     }
   };
@@ -67,7 +77,7 @@ export function TaskSheet({ draft, onClose }: { draft: TaskDraft | null; onClose
             <label>Quick pick</label>
             <div className="chips">
               {goals.map(g => (
-                <button key={g.id} type="button" className={`chip ${goalId === g.id ? 'on' : ''}`} style={colorVar(sectionColor(g.section))} onClick={() => { pickGoal(g.id); setTarget(week ? Math.max(1, Math.round(g.total / 6)) : g.step || 1); }}>{g.label.split(' · ')[0]}</button>
+                <button key={g.id} type="button" className={`chip ${goalId === g.id ? 'on' : ''}`} style={colorVar(sectionColor(g.section))} onClick={() => pickGoal(g.id)}>{g.label.split(' · ')[0]}</button>
               ))}
               <button type="button" className="chip" onClick={() => { const m = goals.find(g => g.fromMocks); if (week && m) { pickGoal(m.id); setTitle('Full mock'); setTarget(1); } else preset('Full mock', 'ALL', 'mock', 1); }}>Full mock</button>
               <button type="button" className="chip" onClick={() => preset('Mock analysis', 'ALL', 'mock', 1)}>Mock analysis</button>
@@ -84,7 +94,7 @@ export function TaskSheet({ draft, onClose }: { draft: TaskDraft | null; onClose
             <option value="">Nothing — just a task</option>
             {goals.map(g => <option key={g.id} value={g.id}>{g.label}</option>)}
           </select>
-          <p className="hint">{goal?.fromMocks ? 'Fills itself when you log a mock on the Mocks tab this week.' : goal ? 'Progress here moves your total goal and earns XP.' : 'Not linked to a total goal — it won’t earn per-unit XP, but finishing it still counts.'}</p>
+          <p className="hint">{goal?.fromMocks ? 'Fills itself when you log a mock on the Mocks tab this week.' : goal ? `Progress here moves your total goal and earns XP. About ${suggest(goal)} ${goal.unit} ${week ? 'a week' : 'a day'} keeps you on pace.` : 'Not linked to a total goal — it won’t earn per-unit XP, but finishing it still counts.'}</p>
         </div>
         <div className="two">
           <div className="field">
