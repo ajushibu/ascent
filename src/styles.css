@@ -245,9 +245,9 @@ h1, h2, h3, p { margin: 0; }
 }
 .nav-item { height: 58px; border-radius: 28px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--muted); font-family: var(--font-display); font-weight: 700; font-size: 13.5px; transition: background 0.2s, color 0.2s; margin: 0 1px; }
 .nav-item.on { background: var(--primary-soft); color: var(--primary); }
-.fab { position: relative; justify-self: center; width: 86px; height: 86px; margin-top: -34px; border-radius: 43px; background: var(--nav-bg); display: grid; place-items: center; box-shadow: 0 0 0 1px var(--line), 0 14px 28px -10px rgba(20, 20, 70, 0.4); }
-.fab > span { width: 68px; height: 68px; border-radius: 34px; display: grid; place-items: center; color: #fff; background: radial-gradient(120% 120% at 30% 15%, color-mix(in srgb, var(--primary) 70%, #fff) 0%, var(--primary) 55%); box-shadow: 0 6px 0 var(--primary-edge), 0 16px 22px -8px color-mix(in srgb, var(--primary) 70%, transparent); transition: transform 0.08s; }
-.fab:active > span { transform: translateY(4px); box-shadow: 0 2px 0 var(--primary-edge); }
+.fab { position: relative; justify-self: center; width: 90px; height: 90px; margin-top: -38px; border-radius: 45px; background: var(--nav-bg); display: grid; place-items: center; box-shadow: 0 0 0 1px var(--line), 0 14px 28px -10px rgba(20, 20, 70, 0.4); }
+.fab > span { width: 62px; height: 62px; border-radius: 31px; transform: translateY(-3px); display: grid; place-items: center; color: #fff; background: radial-gradient(120% 120% at 30% 15%, color-mix(in srgb, var(--primary) 70%, #fff) 0%, var(--primary) 55%); box-shadow: 0 5px 0 var(--primary-edge), 0 14px 20px -8px color-mix(in srgb, var(--primary) 70%, transparent); transition: transform 0.08s; }
+.fab:active > span { transform: translateY(0); box-shadow: 0 2px 0 var(--primary-edge); }
 
 /* ───────── sheets / overlays ───────── */
 .scrim { position: fixed; inset: 0; z-index: 50; background: rgba(12, 12, 30, 0.45); backdrop-filter: blur(3px); animation: fade 0.2s ease; }

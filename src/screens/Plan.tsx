@@ -59,7 +59,10 @@ export function Plan() {
       </header>
 
       <section className="card wash">
-        <div className="caps">CAT · {fmtDay(st.examDate, { day: 'numeric', month: 'short', year: 'numeric' })}</div>
+        <div className="row between">
+          <div className="caps">CAT · {fmtDay(st.examDate, { day: 'numeric', month: 'short', year: 'numeric' })}</div>
+          <span className={`pill ${paceKind}`} style={{ fontSize: 12, height: 32, padding: '0 14px' }}>{paceText}</span>
+        </div>
         <div className="row" style={{ alignItems: 'flex-end', gap: 10, margin: '14px 0 4px' }}>
           <span className="num num-xl" style={{ fontSize: 104 }}>{left}</span>
           <span className="unit" style={{ fontSize: 34, paddingBottom: 6 }}>days</span>
@@ -69,8 +72,6 @@ export function Plan() {
           <span className="caps">Target</span>
           <span className="num num-m" style={{ fontSize: 44 }}>{st.targetPercentile}</span>
           <span className="unit" style={{ fontSize: 22 }}>%ile</span>
-          <span className="spacer" />
-          <span className={`pill ${paceKind}`} style={{ fontSize: 12, height: 32, padding: '0 14px', alignSelf: 'center' }}>{paceText}</span>
         </div>
         <div style={{ margin: '18px 0 10px' }}><Slant ratio={wp.current / wp.total} count={wp.total} /></div>
         <div className="row between caps" style={{ fontSize: 13 }}><span>Week {wp.current}</span><span>of {wp.total}</span></div>
