@@ -1,32 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Section } from '../types';
 import { SECTION_LABEL } from '../types';
-import { useStore } from '../store';
+import { MIN_COUNT, useStore } from '../store';
 import { dayCounted, dayTasks, focusMinutes, taskDone } from '../logic';
 import { colorVar, sectionColor, Stepper } from '../components/ui';
 import { I } from '../components/icons';
 
-const KEY = 'ascent:timer:v1';
-interface Timer {
-  startedAt: number;
-  runningSince: number | null;
-  elapsedBefore: number;
-  durationMin: number;
-  section: Section;
-  taskId: string | null;
-}
-const load = (): Timer | null => {
-  try { const r = localStorage.getItem(KEY); return r ? JSON.parse(r) : null; } catch { return null; }
-};
-const save = (t: Timer | null) => {
-  try { t ? localStorage.setItem(KEY, JSON.stringify(t)) : localStorage.removeItem(KEY); } catch { /* ignore */ }
-};
 const SECTIONS: Section[] = ['QA', 'DILR', 'VARC', 'ALL'];
-const MIN_COUNT = 5;
 
 export function Focus({ initial, onClose }: { initial: { section?: Section; taskId?: string | null }; onClose: () => void }) {
-  const { state, today, addSession } = useStore();
-  const [timer, setTimer] = useState<Timer | null>(() => load());
+  const { state, today, startTimer, pauseTimer, resumeTimer, finishTimer } = useStore();
+  /* the timer lives in the synced state, so it is the same one on every device */
+  const timer = state.timer?.active ? state.timer : null;
   const [duration, setDuration] = useState(50);
   const [section, setSection] = useState<Section>(initial.section ?? 'QA');
   const [taskId, setTaskId] = useState<string | null>(initial.taskId ?? null);
@@ -55,38 +40,20 @@ export function Focus({ initial, onClose }: { initial: { section?: Section; task
     return () => { lock?.release().catch(() => {}); };
   }, [running]);
 
-  const start = () => {
-    const t: Timer = { startedAt: Date.now(), runningSince: Date.now(), elapsedBefore: 0, durationMin: duration, section, taskId };
-    save(t); setTimer(t);
-  };
-  const pause = () => {
-    if (!timer?.runningSince) return;
-    const t = { ...timer, elapsedBefore: timer.elapsedBefore + (Date.now() - timer.runningSince), runningSince: null };
-    save(t); setTimer(t);
-  };
-  const resume = () => {
-    if (!timer) return;
-    const t = { ...timer, runningSince: Date.now() };
-    save(t); setTimer(t);
-  };
+  const start = () => startTimer({ durationMin: duration, section, taskId });
+  const pause = () => pauseTimer();
+  const resume = () => resumeTimer();
 
   const finish = useCallback((auto = false) => {
     if (!timer || finishing.current) return;
     finishing.current = true;
-    const el = timer.elapsedBefore + (timer.runningSince ? Date.now() - timer.runningSince : 0);
-    const full = el >= timer.durationMin * 60_000 - 500;
-    const minutes = full ? timer.durationMin : Math.floor(el / 60_000);
-    save(null);
-    setTimer(null);
-    if (minutes >= MIN_COUNT) {
-      addSession({ minutes, section: timer.section, taskId: timer.taskId, startedAt: timer.startedAt });
-      setResult({ minutes, counted: true, short: false });
-      if (auto && 'vibrate' in navigator) navigator.vibrate?.([200, 100, 200]);
-    } else {
-      setResult({ minutes, counted: false, short: true });
+    const r = finishTimer();
+    if (r) {
+      setResult({ minutes: r.minutes, counted: r.counted, short: !r.counted });
+      if (r.counted && auto && 'vibrate' in navigator) navigator.vibrate?.([200, 100, 200]);
     }
     finishing.current = false;
-  }, [timer, addSession]);
+  }, [timer, finishTimer]);
 
   useEffect(() => {
     if (timer && running && remaining <= 0) finish(true);
@@ -188,7 +155,7 @@ export function Focus({ initial, onClose }: { initial: { section?: Section; task
           <div className="focus-foot">
             <button className="btn" onClick={running ? pause : resume}>{running ? <><I.Pause size={24} /> Pause</> : <><I.Play size={24} /> Resume</>}</button>
             <button className="btn ghost" onClick={() => finish(false)}><I.Stop size={20} /> Finish now</button>
-            <p className="hint" style={{ textAlign: 'center' }}>Sessions of {MIN_COUNT}+ minutes count. Ending early still logs what you did.</p>
+            <p className="hint" style={{ textAlign: 'center' }}>Sessions of {MIN_COUNT}+ minutes count. Ending early still logs what you did. This timer is the same on all your devices.</p>
           </div>
         )}
       </div>

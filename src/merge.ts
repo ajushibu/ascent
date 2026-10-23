@@ -1,4 +1,6 @@
-import type { AppState, Base } from './types';
+import type { AppState, Base, FocusTimer } from './types';
+
+const newer = (a: FocusTimer | null, b: FocusTimer | null) => (!a ? b : !b ? a : b.updatedAt > a.updatedAt ? b : a);
 
 function mergeList<T extends Base>(a: T[], b: T[]): T[] {
   const map = new Map<string, T>();
@@ -21,7 +23,8 @@ export function mergeState(a: AppState, b: AppState): AppState {
     xp: mergeList(a.xp, b.xp),
     mocks: mergeList(a.mocks, b.mocks),
     reflections: mergeList(a.reflections, b.reflections),
-    rewards: mergeList(a.rewards, b.rewards)
+    rewards: mergeList(a.rewards, b.rewards),
+    timer: newer(a.timer, b.timer)
   };
 }
 
@@ -47,7 +50,8 @@ export function emptyState(): AppState {
     xp: [],
     mocks: [],
     reflections: [],
-    rewards: []
+    rewards: [],
+    timer: null
   };
 }
 
@@ -65,6 +69,7 @@ export function normalizeState(raw: unknown): AppState {
     xp: r.xp ?? [],
     mocks: r.mocks ?? [],
     reflections: r.reflections ?? [],
-    rewards: r.rewards ?? []
+    rewards: r.rewards ?? [],
+    timer: r.timer ?? null
   };
 }

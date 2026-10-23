@@ -100,6 +100,19 @@ export interface Settings {
   updatedAt: number;
 }
 
+/** The running focus timer. Lives in the synced state so every device sees (and can control) the same one. */
+export interface FocusTimer {
+  id: string;
+  active: boolean;
+  startedAt: number;
+  runningSince: number | null;
+  elapsedBefore: number;
+  durationMin: number;
+  section: Section;
+  taskId: string | null;
+  updatedAt: number;
+}
+
 export interface AppState {
   settings: Settings;
   goals: Goal[];
@@ -110,6 +123,7 @@ export interface AppState {
   mocks: Mock[];
   reflections: Reflection[];
   rewards: WeeklyReward[];
+  timer: FocusTimer | null;
 }
 
 export const SECTION_LABEL: Record<Section, string> = {

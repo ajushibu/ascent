@@ -1,6 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Session as AuthSession } from '@supabase/supabase-js';
 import type { AppState, Goal, Mock, Reflection, Section, Settings, Task } from './types';
+
+export const MIN_COUNT = 5; // minutes needed for a focus session to count
 import { emptyState, mergeState, normalizeState } from './merge';
 import { reconcile } from './reconcile';
 import { addDays, levelInfo, todayKey, xpTotal } from './logic';
@@ -73,6 +75,11 @@ interface Store {
   logProgress: (task: Task, amount: number) => void;
   undoProgress: (task: Task) => void;
   addSession: (p: { minutes: number; section: Section; taskId: string | null; startedAt: number }) => void;
+  startTimer: (p: { durationMin: number; section: Section; taskId: string | null }) => void;
+  pauseTimer: () => void;
+  resumeTimer: () => void;
+  /** Ends the running timer (on any device) and logs the session once. null if nothing is running. */
+  finishTimer: () => { minutes: number; counted: boolean } | null;
   saveMock: (m: Omit<Mock, 'updatedAt' | 'id'> & { id?: string }) => void;
   deleteMock: (id: string) => void;
   saveReflection: (r: Omit<Reflection, 'id' | 'updatedAt'>) => void;
@@ -334,6 +341,45 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           s => ({ ...s, sessions: [...s.sessions, { id: uid(), dateKey: todayKey(new Date(p.startedAt)), startedAt: p.startedAt, minutes: p.minutes, section: p.section, taskId: p.taskId, updatedAt: Date.now() }] }),
           { toast: 'Session saved' }
         ),
+      startTimer: p =>
+        commit(s => {
+          const now = Date.now();
+          return { ...s, timer: { id: uid(), active: true, startedAt: now, runningSince: now, elapsedBefore: 0, durationMin: p.durationMin, section: p.section, taskId: p.taskId, updatedAt: now } };
+        }),
+      pauseTimer: () =>
+        commit(s => {
+          const t = s.timer;
+          if (!t?.active || !t.runningSince) return s;
+          const now = Date.now();
+          return { ...s, timer: { ...t, elapsedBefore: t.elapsedBefore + (now - t.runningSince), runningSince: null, updatedAt: now } };
+        }),
+      resumeTimer: () =>
+        commit(s => {
+          const t = s.timer;
+          if (!t?.active || t.runningSince) return s;
+          const now = Date.now();
+          return { ...s, timer: { ...t, runningSince: now, updatedAt: now } };
+        }),
+      finishTimer: () => {
+        const t = stateRef.current.timer;
+        if (!t?.active) return null;
+        const now = Date.now();
+        const el = t.elapsedBefore + (t.runningSince ? now - t.runningSince : 0);
+        const full = el >= t.durationMin * 60_000 - 500;
+        const minutes = full ? t.durationMin : Math.floor(el / 60_000);
+        const counted = minutes >= MIN_COUNT;
+        // the session id comes from the timer, so two devices finishing at once log it only once
+        const sid = `timer:${t.id}`;
+        commit(
+          s => ({
+            ...s,
+            timer: { ...t, active: false, runningSince: null, updatedAt: now },
+            sessions: counted && !s.sessions.some(x => x.id === sid) ? [...s.sessions, { id: sid, dateKey: todayKey(new Date(t.startedAt)), startedAt: t.startedAt, minutes, section: t.section, taskId: t.taskId, updatedAt: now }] : s.sessions
+          }),
+          { toast: 'Session saved' }
+        );
+        return { minutes, counted };
+      },
       saveMock: m =>
         commit(
           s => {
@@ -369,7 +415,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         // tombstone everything we know about so other devices converge to empty
         const s = stateRef.current;
         const dead = <T extends { updatedAt: number; deleted?: boolean }>(xs: T[]) => xs.map(x => ({ ...x, deleted: true, updatedAt: Date.now() + 1 }));
-        commit(() => ({ ...e, goals: dead(s.goals), tasks: dead(s.tasks), entries: dead(s.entries), sessions: dead(s.sessions), xp: dead(s.xp), mocks: dead(s.mocks), reflections: dead(s.reflections), rewards: dead(s.rewards) }));
+        commit(() => ({ ...e, goals: dead(s.goals), tasks: dead(s.tasks), entries: dead(s.entries), sessions: dead(s.sessions), xp: dead(s.xp), mocks: dead(s.mocks), reflections: dead(s.reflections), rewards: dead(s.rewards), timer: s.timer ? { ...s.timer, active: false, runningSince: null, updatedAt: Date.now() + 1 } : null }));
       },
       importState: raw => commit(s => mergeState(s, normalizeState(raw)))
     }),

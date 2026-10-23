@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { StoreProvider, useStore } from './store';
 import { UiCtx, type Tab, type Ui } from './ui-context';
 import type { Section } from './types';
@@ -12,6 +12,28 @@ import { Focus } from './screens/Focus';
 import { TaskSheet, type TaskDraft } from './screens/TaskSheet';
 import { MenuSheet, ReflectionSheet, FutureNoteSheet } from './screens/Extras';
 import { Auth, Setup, Splash } from './screens/Gate';
+
+function TimerPill({ onOpen }: { onOpen: () => void }) {
+  const { state } = useStore();
+  const t = state.timer;
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (!t?.active) return;
+    const id = window.setInterval(() => setNow(Date.now()), 500);
+    return () => clearInterval(id);
+  }, [t?.active]);
+  if (!t?.active) return null;
+  const left = Math.max(0, t.durationMin * 60_000 - (t.elapsedBefore + (t.runningSince ? now - t.runningSince : 0)));
+  const mm = String(Math.floor(left / 60_000)).padStart(2, '0');
+  const ss = String(Math.floor((left % 60_000) / 1000)).padStart(2, '0');
+  return (
+    <button className="timer-pill" onClick={onOpen} aria-label="Open focus timer">
+      <span className={`live ${t.runningSince ? '' : 'paused'}`} />
+      <span className="time">{mm}:{ss}</span>
+      <span className="what">{t.runningSince ? 'Focus' : 'Paused'}</span>
+    </button>
+  );
+}
 
 function Shell() {
   const { state, ready, needsAuth } = useStore();
@@ -55,6 +77,7 @@ function Shell() {
         {tab === 'mocks' && <Mocks />}
         {tab === 'insights' && <Insights />}
 
+        {!focus && <TimerPill onOpen={() => setFocus({})} />}
         <div className="nav-fade" aria-hidden="true" />
         <nav className="nav" aria-label="Main">
           {nav(items[0])}
