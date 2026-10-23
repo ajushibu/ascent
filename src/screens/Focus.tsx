@@ -44,20 +44,28 @@ export function Focus({ initial, onClose }: { initial: { section?: Section; task
   const pause = () => pauseTimer();
   const resume = () => resumeTimer();
 
-  const finish = useCallback((auto = false) => {
+  const finish = useCallback(() => {
     if (!timer || finishing.current) return;
     finishing.current = true;
     const r = finishTimer();
-    if (r) {
-      setResult({ minutes: r.minutes, counted: r.counted, short: !r.counted });
-      if (r.counted && auto && 'vibrate' in navigator) navigator.vibrate?.([200, 100, 200]);
-    }
+    if (r) setResult({ minutes: r.minutes, counted: r.counted, short: !r.counted });
     finishing.current = false;
   }, [timer, finishTimer]);
 
+  /* The store ends the timer itself when time is up (even if this screen was closed), or when another device ends it.
+     If that happens while this screen is open, show the summary. */
+  const lastId = useRef<string | null>(null);
   useEffect(() => {
-    if (timer && running && remaining <= 0) finish(true);
-  }, [timer, running, remaining, finish]);
+    if (timer) { lastId.current = timer.id; return; }
+    const id = lastId.current;
+    if (!id) return;
+    lastId.current = null;
+    const s = state.sessions.find(x => x.id === `timer:${id}` && !x.deleted);
+    if (s) {
+      setResult(prev => prev ?? { minutes: s.minutes, counted: true, short: false });
+      if ('vibrate' in navigator) navigator.vibrate?.([200, 100, 200]);
+    }
+  }, [timer, state.sessions]);
 
   const mm = String(Math.floor(remaining / 60_000)).padStart(2, '0');
   const ss = String(Math.floor((remaining % 60_000) / 1000)).padStart(2, '0');
@@ -104,7 +112,7 @@ export function Focus({ initial, onClose }: { initial: { section?: Section; task
     <div className="fullscreen focus" style={colorVar(sectionColor(activeSection))}>
       <div className="inner">
         <div className="row between">
-          <button className="round-btn" aria-label="Close" onClick={() => { if (timer) pause(); onClose(); }}><I.X /></button>
+          <button className="round-btn" aria-label="Close" onClick={onClose}><I.X /></button>
           <span className="tag"><I.Bolt size={16} />1 XP / min</span>
           <span style={{ width: 54 }} />
         </div>
@@ -154,7 +162,7 @@ export function Focus({ initial, onClose }: { initial: { section?: Section; task
         {timer && (
           <div className="focus-foot">
             <button className="btn" onClick={running ? pause : resume}>{running ? <><I.Pause size={24} /> Pause</> : <><I.Play size={24} /> Resume</>}</button>
-            <button className="btn ghost" onClick={() => finish(false)}><I.Stop size={20} /> Finish now</button>
+            <button className="btn ghost" onClick={() => finish()}><I.Stop size={20} /> Finish now</button>
             <p className="hint" style={{ textAlign: 'center' }}>Sessions of {MIN_COUNT}+ minutes count. Ending early still logs what you did. This timer is the same on all your devices.</p>
           </div>
         )}

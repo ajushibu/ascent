@@ -3,6 +3,7 @@ import type { Session as AuthSession } from '@supabase/supabase-js';
 import type { AppState, Goal, Mock, Reflection, Section, Settings, Task } from './types';
 
 export const MIN_COUNT = 5; // minutes needed for a focus session to count
+const PAUSED_LIMIT_MS = 3 * 3_600_000; // a timer left paused this long is ended and logs what was done
 import { emptyState, mergeState, normalizeState } from './merge';
 import { reconcile } from './reconcile';
 import { addDays, levelInfo, todayKey, xpTotal } from './logic';
@@ -376,7 +377,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             timer: { ...t, active: false, runningSince: null, updatedAt: now },
             sessions: counted && !s.sessions.some(x => x.id === sid) ? [...s.sessions, { id: sid, dateKey: todayKey(new Date(t.startedAt)), startedAt: t.startedAt, minutes, section: t.section, taskId: t.taskId, updatedAt: now }] : s.sessions
           }),
-          { toast: 'Session saved' }
+          { toast: counted ? `${minutes} min logged` : 'Session ended' }
         );
         return { minutes, counted };
       },
@@ -421,6 +422,38 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }),
     [commit]
   );
+
+  /* A timer must end by itself: when its time is up, or if it was left paused for hours.
+     This lives here (not in the timer screen) so it also works when the app was closed or the phone was locked:
+     the full time is credited the moment the app is next open. */
+  const finishTimer = api.finishTimer;
+  useEffect(() => {
+    if (!ready) return;
+    const check = () => {
+      const t = stateRef.current.timer;
+      if (!t?.active) return;
+      const now = Date.now();
+      const el = t.elapsedBefore + (t.runningSince ? now - t.runningSince : 0);
+      const stale = !t.runningSince && now - t.updatedAt > PAUSED_LIMIT_MS;
+      if (el >= t.durationMin * 60_000 - 500 || stale) finishTimer();
+    };
+    check();
+    const t = state.timer;
+    const left = t?.active && t.runningSince ? t.durationMin * 60_000 - (t.elapsedBefore + (Date.now() - t.runningSince)) : null;
+    const id = left != null ? window.setTimeout(check, Math.max(0, left) + 300) : null;
+    const wake = () => document.visibilityState !== 'hidden' && check();
+    document.addEventListener('visibilitychange', wake);
+    window.addEventListener('pageshow', wake);
+    window.addEventListener('focus', wake);
+    const poll = window.setInterval(check, 15_000);
+    return () => {
+      if (id) clearTimeout(id);
+      clearInterval(poll);
+      document.removeEventListener('visibilitychange', wake);
+      window.removeEventListener('pageshow', wake);
+      window.removeEventListener('focus', wake);
+    };
+  }, [ready, state.timer, finishTimer]);
 
   const value: Store = {
     state,
