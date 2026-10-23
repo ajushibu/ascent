@@ -29,6 +29,8 @@ export interface Task extends Base {
   section: Section;
   target: number;
   unit: string;
+  /** XP for finishing a task that isn't linked to a total goal (personal goals). Default 15. */
+  xp?: number;
 }
 
 /** A unit of progress. Goal progress and task progress are both sums of entries. */

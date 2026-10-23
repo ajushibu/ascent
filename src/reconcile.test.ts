@@ -75,3 +75,11 @@ test('minimum-viable day counts at 45 focus minutes', () => {
   assert.equal(dayCounted(s, T), true);
   assert.ok(levelInfo(xpTotal(reconcile(s).state)).level >= 1);
 });
+
+test('a personal task earns the XP typed on it, not the default', () => {
+  const s = base();
+  s.tasks.push({ id: 'p1', scope: 'day', key: T, title: 'Gym', goalId: null, section: 'ALL', target: 1, unit: 'done', xp: 40, updatedAt: 1 });
+  s.entries.push({ id: 'e1', dateKey: T, goalId: null, taskId: 'p1', amount: 1, ts: 1, updatedAt: 1 });
+  const r = reconcile(s);
+  assert.equal(xpTotal(r.state), 40 + 30); // custom XP + day bonus
+});

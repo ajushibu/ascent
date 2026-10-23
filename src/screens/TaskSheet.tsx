@@ -23,6 +23,7 @@ export function TaskSheet({ draft, onClose }: { draft: TaskDraft | null; onClose
   const [target, setTarget] = useState(1);
   const [unit, setUnit] = useState('');
   const [section, setSection] = useState<Section>('QA');
+  const [xp, setXp] = useState(15);
 
   useEffect(() => {
     if (!draft) return;
@@ -32,6 +33,7 @@ export function TaskSheet({ draft, onClose }: { draft: TaskDraft | null; onClose
     setTarget(t?.target ?? (draft.scope === 'week' ? 5 : 1));
     setUnit(t?.unit ?? '');
     setSection(t?.section ?? 'QA');
+    setXp(t?.xp ?? 15);
   }, [draft]);
 
   if (!draft) return null;
@@ -63,7 +65,7 @@ export function TaskSheet({ draft, onClose }: { draft: TaskDraft | null; onClose
   };
 
   const save = () => {
-    const base = { scope: draft.scope, key: draft.key, title: title.trim() || goal?.label || 'Task', goalId, section: goal?.section ?? section, target: Math.max(0.25, target), unit: goal?.unit ?? (unit.trim() || 'done') };
+    const base = { scope: draft.scope, key: draft.key, title: title.trim() || goal?.label || 'Task', goalId, section: goal?.section ?? section, target: Math.max(0.25, target), unit: goal?.unit ?? (unit.trim() || 'done'), xp: goal ? undefined : Math.max(0, Math.min(500, Math.round(xp))) };
     if (draft.task) updateTask(draft.task.id, base);
     else addTask(base);
     onClose();
@@ -81,6 +83,7 @@ export function TaskSheet({ draft, onClose }: { draft: TaskDraft | null; onClose
               ))}
               <button type="button" className="chip" onClick={() => { const m = goals.find(g => g.fromMocks); if (week && m) { pickGoal(m.id); setTitle('Full mock'); setTarget(1); } else preset('Full mock', 'ALL', 'mock', 1); }}>Full mock</button>
               <button type="button" className="chip" onClick={() => preset('Mock analysis', 'ALL', 'mock', 1)}>Mock analysis</button>
+              {!week && <button type="button" className="chip" onClick={() => { preset('', 'ALL', 'done', 1); setXp(20); }}>Personal</button>}
             </div>
           </div>
         )}
@@ -108,6 +111,13 @@ export function TaskSheet({ draft, onClose }: { draft: TaskDraft | null; onClose
             </div>
           )}
         </div>
+        {!goal && (
+          <div className="field">
+            <label>XP reward</label>
+            <Stepper value={xp} onChange={setXp} min={0} max={500} step={5} />
+            <p className="hint">Earned when you finish it — for anything of your own, like a workout or sleeping on time. It still counts toward completing the day.</p>
+          </div>
+        )}
         {!goal && (
           <div className="field">
             <label>Section</label>

@@ -66,7 +66,7 @@ export function reconcile(input: AppState, now = Date.now()): { state: AppState;
   const tasks = tasksOf(s);
   for (const t of tasks) {
     if (taskDone(s, t) && taskProgress(s, t) > 0)
-      add({ reason: 'task', ref: t.id, dateKey: completionDate(s, t.id, t.goalId, t.scope, t.key), amount: XP_TASK });
+      add({ reason: 'task', ref: t.id, dateKey: completionDate(s, t.id, t.goalId, t.scope, t.key), amount: t.goalId ? XP_TASK : Math.max(0, Math.round(t.xp ?? XP_TASK)) });
   }
 
   const dayKeys = new Set(tasks.filter(t => t.scope === 'day').map(t => t.key));
