@@ -1,10 +1,11 @@
+import { useState } from 'react';
 import { useStore } from '../store';
 import { useUi } from '../ui-context';
 import {
-  addDays, dayCounted, dayRatio, dayStatus, dayTasks, daysLeft, fmtMin, fmtNum, focusMinutes, fromKey, goalDone, goalsOf, sessionsOf,
+  addDays, dailySuggestions, dayCounted, dayRatio, dayStatus, dayTasks, daysLeft, fmtMin, fmtNum, focusMinutes, fromKey, goalDone, goalsOf, sessionsOf,
   streakOf, taskDone, taskProgress, taskRatio, weekDays, weekProgress, weekTasks, xpOnDay
 } from '../logic';
-import { DotArc, Ring, Slant, StackBars, colorVar, sectionColor, SectionTag } from '../components/ui';
+import { DotArc, Ring, Slant, StackBars, colorVar, sectionColor, SectionTag, SectionIcon } from '../components/ui';
 import { I } from '../components/icons';
 import { TaskRow } from '../components/TaskRow';
 
@@ -48,6 +49,11 @@ export function Today() {
 
   const ys = dayTasks(state, yesterday);
 
+  /* today's share of the weekly goals, offered once while the day is still empty */
+  const [sugOpen, setSugOpen] = useState(() => dayTasks(state, today).length === 0);
+  const sugs = sugOpen ? dailySuggestions(state, today) : [];
+  const addSug = (x: (typeof sugs)[number]) => addTask({ scope: 'day', key: today, title: x.title, goalId: x.goalId, section: x.section, target: x.amount, unit: x.unit });
+
   return (
     <div className="screen">
       <header className="header">
@@ -78,6 +84,27 @@ export function Today() {
         <h2 className="h2">{next ? 'Up next' : tasks.length ? 'All done' : 'Plan today'}</h2>
         <span className="muted" style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 18 }}>Week {wp.current} · {left} days to CAT</span>
       </div>
+
+      {sugs.length > 0 && (
+        <section className="card tint-gold">
+          <div className="row between">
+            <div className="card-title"><span className="ico-bubble" style={colorVar('var(--gold)')}><I.Sparkle size={20} /></span>Suggested for today</div>
+            <button className="btn-link" onClick={() => setSugOpen(false)}>Hide</button>
+          </div>
+          <p className="hint" style={{ margin: '8px 0 14px' }}>Your share of this week’s goals. Add any you like, then tap a goal to change it.</p>
+          {sugs.map(x => (
+            <div key={x.weekTaskId} className="task" style={colorVar(sectionColor(x.section))}>
+              <span className="ico-bubble"><SectionIcon s={x.section} size={20} /></span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="t">{fmtNum(x.amount)} {x.unit} · {x.title}</div>
+                <div className="s">{x.overCap ? `Behind: ${fmtNum(x.left)} left in ${x.days} ${x.days === 1 ? 'day' : 'days'}. Consider lowering this week’s target.` : `${fmtNum(x.left)} left this week · ${x.days} ${x.days === 1 ? 'day' : 'days'} to go`}</div>
+              </div>
+              <button className="mini-btn" aria-label={`Add ${x.title}`} onClick={() => addSug(x)}><I.Plus size={20} /></button>
+            </div>
+          ))}
+          {sugs.length > 1 && <button className="btn" style={{ marginTop: 16 }} onClick={() => sugs.forEach(addSug)}><I.Plus size={22} /> Add all {sugs.length}</button>}
+        </section>
+      )}
 
       {next ? (
         <section className="card wash" style={colorVar(sectionColor(next.section))}>

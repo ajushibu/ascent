@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { addDays, computeStreak, daysBetween, levelInfo, weekStart, xpForLevel, weekProgress } from './logic.ts';
+import { addDays, computeStreak, dailySuggestions, daysBetween, levelInfo, weekStart, xpForLevel, weekProgress } from './logic.ts';
+import { emptyState } from './merge.ts';
 
 test('weekStart returns Monday', () => {
   assert.equal(weekStart('2026-10-23'), '2026-10-19'); // Fri -> Mon
@@ -66,4 +67,32 @@ test('levels are monotonic and consistent', () => {
   assert.ok(xpForLevel(10) > xpForLevel(9));
   const li = levelInfo(500);
   assert.ok(li.ratio >= 0 && li.ratio < 1);
+});
+
+function suggestState(done: number) {
+  const st = emptyState();
+  st.goals = [{ id: 'g', label: 'Quant', unit: 'topics', total: 40, section: 'QA', xpPerUnit: 20, step: 1, order: 0, updatedAt: 1 }];
+  st.tasks = [{ id: 'w', scope: 'week', key: '2026-10-19', title: 'Quant', goalId: 'g', section: 'QA', target: 14, unit: 'topics', updatedAt: 1 }];
+  st.entries = done ? [{ id: 'e', dateKey: '2026-10-19', goalId: 'g', taskId: null, amount: done, ts: 1, updatedAt: 1 }] : [];
+  return st;
+}
+
+test('daily suggestion splits what is left over the days left', () => {
+  assert.equal(dailySuggestions(suggestState(0), '2026-10-19')[0].amount, 2); // 14 over 7 days
+  const thu = dailySuggestions(suggestState(4), '2026-10-22')[0]; // 10 left, 4 days (Thu-Sun)
+  assert.equal(thu.amount, 3);
+  assert.equal(thu.overCap, false);
+});
+
+test('daily suggestion is capped at double a normal day and flags the shortfall', () => {
+  const sun = dailySuggestions(suggestState(4), '2026-10-25')[0]; // 10 left, 1 day
+  assert.equal(sun.amount, 4);
+  assert.equal(sun.overCap, true);
+});
+
+test('no suggestion when the week is done or the goal is already planned today', () => {
+  assert.equal(dailySuggestions(suggestState(14), '2026-10-22').length, 0);
+  const st = suggestState(0);
+  st.tasks.push({ id: 'd', scope: 'day', key: '2026-10-22', title: 'Quant', goalId: 'g', section: 'QA', target: 2, unit: 'topics', updatedAt: 1 });
+  assert.equal(dailySuggestions(st, '2026-10-22').length, 0);
 });

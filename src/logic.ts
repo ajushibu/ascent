@@ -248,3 +248,43 @@ export function entriesForGoalOnDay(es: Entry[], goalId: string, key: string) {
 
 export const fmtNum = (n: number) => (Math.abs(n - Math.round(n)) < 1e-9 ? String(Math.round(n)) : String(round2(n)));
 export const fmtMin = (m: number) => (m >= 60 ? `${Math.floor(m / 60)}h ${m % 60 ? (m % 60) + 'm' : ''}`.trim() : `${m}m`);
+
+/* ───────────── daily suggestions ───────────── */
+
+export interface Suggestion {
+  weekTaskId: string;
+  title: string;
+  goalId: string;
+  section: Section;
+  unit: string;
+  amount: number;
+  left: number;
+  days: number;
+  /** Even the capped amount won't finish the week: the weekly target is probably too high. */
+  overCap: boolean;
+  need: number;
+}
+
+/**
+ * Today's share of every linked weekly goal: what is left this week, spread over the days left (today included).
+ * Never suggests more than double a normal day, so falling behind doesn't produce a scary number.
+ */
+export function dailySuggestions(s: AppState, today: string): Suggestion[] {
+  const days = daysBetween(today, addDays(weekStart(today), 6)) + 1;
+  const goals = new Map(goalsOf(s).map(g => [g.id, g]));
+  const planned = new Set(dayTasks(s, today).map(t => t.goalId).filter(Boolean));
+  const out: Suggestion[] = [];
+  for (const wt of weekTasks(s, today)) {
+    const g = wt.goalId ? goals.get(wt.goalId) : undefined;
+    if (!g || g.fromMocks || planned.has(g.id)) continue;
+    const left = wt.target - taskProgress(s, wt);
+    if (left <= 1e-9) continue;
+    const step = g.step || 1;
+    const up = (n: number) => Math.ceil(n / step - 1e-9) * step;
+    const need = up(left / days);
+    const base = Math.max(step, up(wt.target / 7));
+    const cap = base * 2;
+    out.push({ weekTaskId: wt.id, title: wt.title.replace(/\s+(this|for the) week$/i, '').trim() || wt.title, goalId: g.id, section: g.section, unit: g.unit, amount: Math.min(need, cap, up(left)), left: round2(left), days, overCap: need > cap, need });
+  }
+  return out;
+}
