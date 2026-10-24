@@ -3,7 +3,7 @@ import type { Section } from '../types';
 import { SECTION_LABEL } from '../types';
 import { useStore } from '../store';
 import { now as clockNow } from '../clock';
-import { MIN_COUNT, elapsedMs, totalMs } from '../timer';
+import { MIN_COUNT, creditedMinutes, elapsedMs, totalMs } from '../timer';
 import { dayCounted, dayTasks, focusMinutes, taskDone } from '../logic';
 import { colorVar, sectionColor, Stepper } from '../components/ui';
 import { I } from '../components/icons';
@@ -21,6 +21,8 @@ export function Focus({ initial, onClose }: { initial: { section?: Section; task
   const [now, setNow] = useState(clockNow());
   const [result, setResult] = useState<{ minutes: number; counted: boolean; short: boolean } | null>(null);
   const finishing = useRef(false);
+  /* "Stop" freezes the clock and asks what to do with the time so far */
+  const [stopping, setStopping] = useState(false);
 
   const tasks = useMemo(() => dayTasks(state, today).filter(t => !taskDone(state, t)), [state, today]);
 
@@ -52,13 +54,17 @@ export function Focus({ initial, onClose }: { initial: { section?: Section; task
   const pause = () => pauseTimer();
   const resume = () => resumeTimer();
 
-  const finish = useCallback(() => {
+  const stop = () => { if (running) pauseTimer(); setStopping(true); };
+  const keepGoing = () => { setStopping(false); resumeTimer(); };
+  const logStopped = useCallback(() => {
     if (!timer || finishing.current) return;
     finishing.current = true;
     const r = finishTimer();
+    setStopping(false);
     if (r) setResult({ minutes: r.minutes, counted: r.counted, short: !r.counted });
     finishing.current = false;
   }, [timer, finishTimer]);
+  const discardStopped = () => { discardTimer(); setStopping(false); onClose(); };
 
   /* The store ends the timer itself when time is up (even if this screen was closed), or when another device ends it.
      If that happens while this screen is open, show the summary. */
@@ -195,11 +201,27 @@ export function Focus({ initial, onClose }: { initial: { section?: Section; task
         {timer && (
           <div className="focus-foot">
             <button className="btn" onClick={running ? pause : resume}>{running ? <><I.Pause size={24} /> Pause</> : <><I.Play size={24} /> Resume</>}</button>
-            <button className="btn ghost" onClick={() => finish()}><I.Stop size={20} /> Finish now</button>
-            <p className="hint" style={{ textAlign: 'center' }}>Sessions of {MIN_COUNT}+ minutes count. Ending early still logs what you did. This timer is the same on all your devices.</p>
+            <button className="btn ghost" onClick={stop}><I.Stop size={20} /> Stop</button>
+            <p className="hint" style={{ textAlign: 'center' }}>Sessions of {MIN_COUNT}+ minutes count. Stop lets you log the time so far or throw it away. This timer is the same on all your devices.</p>
           </div>
         )}
       </div>
+      {timer && stopping && (() => {
+        const mins = creditedMinutes(timer, now);
+        const ok = mins >= MIN_COUNT;
+        return (
+          <div className="stop-veil" role="dialog" aria-modal="true" aria-label="Stop session">
+            <div className="stop-card stack" style={{ gap: 14, textAlign: 'center' }}>
+              <h2 className="h1" style={{ fontSize: 26 }}>Stop this session?</h2>
+              <div className="row" style={{ alignItems: 'baseline', justifyContent: 'center', gap: 8 }}><span className="num num-xl">{mins}</span><span className="unit" style={{ fontSize: 26 }}>min so far</span></div>
+              <p className="body">{ok ? 'Log the time you spent, or throw it away if you didn’t really study.' : `Under ${MIN_COUNT} minutes can’t be logged.`}</p>
+              {ok && <button className="btn" onClick={logStopped}>Log {mins} min</button>}
+              <button className="btn ghost" onClick={discardStopped}>Discard session</button>
+              <button className="btn-link" onClick={keepGoing}>Keep going</button>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

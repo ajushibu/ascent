@@ -333,3 +333,6 @@ h1, h2, h3, p { margin: 0; }
 
 @media (prefers-reduced-motion: reduce) { * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; } }
 @media (max-width: 380px) { .num-xl { font-size: 80px; } .h1 { font-size: 30px; } .btn { font-size: 20px; } }
+
+.stop-veil { position: fixed; inset: 0; z-index: 60; display: grid; align-items: end; background: rgba(8, 9, 20, 0.55); padding: 16px 16px calc(env(safe-area-inset-bottom) + 16px); }
+.stop-card { background: var(--card); border-radius: 32px; padding: 24px 20px; }
