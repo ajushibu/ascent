@@ -24,6 +24,8 @@ export function TaskSheet({ draft, onClose }: { draft: TaskDraft | null; onClose
   const [unit, setUnit] = useState('');
   const [section, setSection] = useState<Section>('QA');
   const [xp, setXp] = useState(15);
+  /* which of the no-goal quick picks is active, so the chip lights up */
+  const [picked, setPicked] = useState<'mock' | 'analysis' | 'personal' | null>(null);
 
   useEffect(() => {
     if (!draft) return;
@@ -34,6 +36,7 @@ export function TaskSheet({ draft, onClose }: { draft: TaskDraft | null; onClose
     setUnit(t?.unit ?? '');
     setSection(t?.section ?? 'QA');
     setXp(t?.xp ?? 15);
+    setPicked(null);
   }, [draft]);
 
   if (!draft) return null;
@@ -51,6 +54,7 @@ export function TaskSheet({ draft, onClose }: { draft: TaskDraft | null; onClose
 
   const pickGoal = (id: string | null) => {
     setGoalId(id);
+    setPicked(null);
     const g = goals.find(x => x.id === id);
     if (g) {
       setSection(g.section);
@@ -60,7 +64,8 @@ export function TaskSheet({ draft, onClose }: { draft: TaskDraft | null; onClose
     }
   };
 
-  const preset = (t: string, s: Section, u: string, n = 1) => {
+  const preset = (t: string, s: Section, u: string, n = 1, p: typeof picked = null) => {
+    setPicked(p);
     setGoalId(null); setTitle(t); setSection(s); setUnit(u); setTarget(n);
   };
 
@@ -81,15 +86,15 @@ export function TaskSheet({ draft, onClose }: { draft: TaskDraft | null; onClose
               {goals.map(g => (
                 <button key={g.id} type="button" className={`chip ${goalId === g.id ? 'on' : ''}`} style={colorVar(sectionColor(g.section))} onClick={() => pickGoal(g.id)}>{g.label.split(' · ')[0]}</button>
               ))}
-              <button type="button" className="chip" onClick={() => { const m = goals.find(g => g.fromMocks); if (week && m) { pickGoal(m.id); setTitle('Full mock'); setTarget(1); } else preset('Full mock', 'ALL', 'mock', 1); }}>Full mock</button>
-              <button type="button" className="chip" onClick={() => preset('Mock analysis', 'ALL', 'mock', 1)}>Mock analysis</button>
-              {!week && <button type="button" className="chip" onClick={() => { preset('', 'ALL', 'done', 1); setXp(20); }}>Personal</button>}
+              <button type="button" className={`chip ${picked === 'mock' || (week && goal?.fromMocks) ? 'on' : ''}`} onClick={() => { const m = goals.find(g => g.fromMocks); if (week && m) { pickGoal(m.id); setTitle('Full mock'); setTarget(1); } else preset('Full mock', 'ALL', 'mock', 1, 'mock'); }}>Full mock</button>
+              <button type="button" className={`chip ${picked === 'analysis' ? 'on' : ''}`} onClick={() => preset('Mock analysis', 'ALL', 'mock', 1, 'analysis')}>Mock analysis</button>
+              {!week && <button type="button" className={`chip ${picked === 'personal' ? 'on' : ''}`} onClick={() => { preset('', 'ALL', 'done', 1, 'personal'); setXp(20); document.getElementById('tt')?.focus(); }}>Personal</button>}
             </div>
           </div>
         )}
         <div className="field">
           <label htmlFor="tt">What</label>
-          <input id="tt" className="input" value={title} placeholder="e.g. 2 DI sets, timed" onChange={e => setTitle(e.target.value)} />
+          <input id="tt" className="input" value={title} placeholder={picked === 'personal' ? 'e.g. Gym, sleep by 11' : 'e.g. 2 DI sets, timed'} onChange={e => setTitle(e.target.value)} />
         </div>
         <div className="field">
           <label htmlFor="tg">Counts toward</label>
