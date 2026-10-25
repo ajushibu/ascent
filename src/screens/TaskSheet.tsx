@@ -35,7 +35,7 @@ export function TaskSheet({ draft, onClose }: { draft: TaskDraft | null; onClose
     setTarget(t?.target ?? (draft.scope === 'week' ? 5 : 1));
     setUnit(t?.unit ?? '');
     setSection(t?.section ?? 'QA');
-    setXp(t?.xp ?? 15);
+    setXp(t?.xp ?? (t?.goalId && state.goals.some(g => g.id === t.goalId && g.fromMocks) ? 100 : 15));
     setPicked(null);
   }, [draft]);
 
@@ -67,6 +67,7 @@ export function TaskSheet({ draft, onClose }: { draft: TaskDraft | null; onClose
       setUnit(g.unit);
       if (!draft.task) setTarget(suggest(g));
       if (!title.trim() || goals.some(x => x.label === title)) setTitle(g.label);
+      if (g.fromMocks && !draft.task) setXp(100);
     }
   };
 
@@ -76,7 +77,7 @@ export function TaskSheet({ draft, onClose }: { draft: TaskDraft | null; onClose
   };
 
   const save = () => {
-    const base = { scope: draft.scope, key: draft.key, title: title.trim() || goal?.label || 'Task', goalId, section: goal?.section ?? section, target: Math.max(0.25, target), unit: goal?.unit ?? (unit.trim() || 'done'), xp: goal ? undefined : Math.max(0, Math.min(500, Math.round(xp))) };
+    const base = { scope: draft.scope, key: draft.key, title: title.trim() || goal?.label || 'Task', goalId, section: goal?.section ?? section, target: Math.max(0.25, target), unit: goal?.unit ?? (unit.trim() || 'done'), xp: goal && !goal.fromMocks ? undefined : Math.max(0, Math.min(500, Math.round(xp))) };
     if (draft.task) updateTask(draft.task.id, base);
     else addTask(base);
     onClose();
@@ -92,8 +93,8 @@ export function TaskSheet({ draft, onClose }: { draft: TaskDraft | null; onClose
               {goals.map(g => (
                 <button key={g.id} type="button" className={`chip ${goalId === g.id ? 'on' : ''}`} style={colorVar(sectionColor(g.section))} onClick={() => pickGoal(g.id)}>{g.label.split(' · ')[0]}</button>
               ))}
-              <button type="button" className={`chip ${picked === 'mock' || goal?.fromMocks ? 'on' : ''}`} onClick={() => { const m = goals.find(g => g.fromMocks); if (m) { pickGoal(m.id); setTitle('Full mock'); setTarget(1); } else preset('Full mock', 'ALL', 'mock', 1, 'mock'); }}>Full mock</button>
-              <button type="button" className={`chip ${picked === 'analysis' ? 'on' : ''}`} onClick={() => preset('Mock analysis', 'ALL', 'mock', 1, 'analysis')}>Mock analysis</button>
+              <button type="button" className={`chip ${picked === 'mock' || goal?.fromMocks ? 'on' : ''}`} onClick={() => { const m = goals.find(g => g.fromMocks); if (m) { pickGoal(m.id); setTitle('Full mock'); setTarget(1); setXp(100); } else { preset('Full mock', 'ALL', 'mock', 1, 'mock'); setXp(100); } }}>Full mock</button>
+              <button type="button" className={`chip ${picked === 'analysis' ? 'on' : ''}`} onClick={() => { preset('Mock analysis', 'ALL', 'mock', 1, 'analysis'); setXp(100); }}>Mock analysis</button>
               {!week && <button type="button" className={`chip ${picked === 'personal' ? 'on' : ''}`} onClick={() => { preset('', 'ALL', 'done', 1, 'personal'); setXp(20); document.getElementById('tt')?.focus(); }}>Personal</button>}
             </div>
           </div>
@@ -122,7 +123,7 @@ export function TaskSheet({ draft, onClose }: { draft: TaskDraft | null; onClose
             </div>
           )}
         </div>
-        {!goal && (
+        {(!goal || goal.fromMocks) && (
           <div className="field">
             <label>XP reward</label>
             <Stepper value={xp} onChange={setXp} min={0} max={500} step={5} />
