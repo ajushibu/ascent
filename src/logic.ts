@@ -74,6 +74,10 @@ export function taskProgress(s: AppState, t: Task): number {
     const days = new Set(weekDays(t.key));
     return round2(es.filter(e => e.goalId === t.goalId && days.has(e.dateKey)).reduce((a, e) => a + e.amount, 0));
   }
+  if (t.scope === 'day' && t.goalId && s.goals.some(g => g.id === t.goalId && !g.deleted && g.fromMocks)) {
+    // a daily mock task fills itself from the mocks logged on that day
+    return round2(es.filter(e => e.goalId === t.goalId && e.dateKey === t.key).reduce((a, e) => a + e.amount, 0));
+  }
   return round2(es.filter(e => e.taskId === t.id).reduce((a, e) => a + e.amount, 0));
 }
 

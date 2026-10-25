@@ -83,3 +83,20 @@ test('a personal task earns the XP typed on it, not the default', () => {
   const r = reconcile(s);
   assert.equal(xpTotal(r.state), 40 + 30); // custom XP + day bonus
 });
+
+test('a daily mock task ticks itself from the mock logged that day, and only that day', () => {
+  const s = base();
+  s.tasks.push({ id: 'dm', scope: 'day', key: T, title: 'Full mock', goalId: 'g-mock', section: 'ALL', target: 1, unit: 'mock', updatedAt: 1 });
+  let r = reconcile(s);
+  assert.equal(xpTotal(r.state), 0); // nothing logged, nothing earned
+  r.state.mocks.push({ id: 'm1', name: 'Mock 1', dateKey: '2026-10-22', overall: { score: null, percentile: 80 }, varc: { score: null, percentile: null }, dilr: { score: null, percentile: null }, qa: { score: null, percentile: null }, notes: '', analysed: false, updatedAt: 1 } as never);
+  r = reconcile(r.state);
+  assert.equal(r.state.tasks[0].id, 'dm');
+  const done = (st: AppState) => import('./logic.ts').then(m => m.taskDone(st, st.tasks[0]));
+  return done(r.state).then(d => {
+    assert.equal(d, false); // a mock from another day doesn't tick today's task
+    r.state.mocks.push({ ...r.state.mocks[0], id: 'm2', dateKey: T } as never);
+    r = reconcile(r.state);
+    return done(r.state).then(d2 => assert.equal(d2, true));
+  });
+});

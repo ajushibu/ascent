@@ -378,6 +378,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           s => {
             // never log more than what is left: tapping a finished goal again, or a step bigger than the remainder,
             // must not inflate totals and XP
+            // mock progress comes only from logged mocks, never from a tap
+            if (task.goalId && s.goals.some(g => g.id === task.goalId && g.fromMocks)) return s;
             const left = task.target - taskProgress(s, task);
             const a = Math.round(Math.min(amount, left) * 100) / 100;
             if (!(a > 0)) return s;

@@ -16,8 +16,8 @@ const SECTIONS: Section[] = ['QA', 'DILR', 'VARC', 'ALL'];
 export function TaskSheet({ draft, onClose }: { draft: TaskDraft | null; onClose: () => void }) {
   const { state, addTask, updateTask, deleteTask } = useStore();
   const isWeek = draft?.scope === 'week';
-  /* Mocks can only be linked from weekly goals: progress is counted from the mocks logged that week. */
-  const goals = goalsOf(state).filter(g => isWeek || !g.fromMocks);
+  /* Mocks can be linked from daily and weekly goals: they fill themselves from the mocks logged that day / week. */
+  const goals = goalsOf(state);
   const [title, setTitle] = useState('');
   const [goalId, setGoalId] = useState<string | null>(null);
   const [target, setTarget] = useState(1);
@@ -92,7 +92,7 @@ export function TaskSheet({ draft, onClose }: { draft: TaskDraft | null; onClose
               {goals.map(g => (
                 <button key={g.id} type="button" className={`chip ${goalId === g.id ? 'on' : ''}`} style={colorVar(sectionColor(g.section))} onClick={() => pickGoal(g.id)}>{g.label.split(' · ')[0]}</button>
               ))}
-              <button type="button" className={`chip ${picked === 'mock' || (week && goal?.fromMocks) ? 'on' : ''}`} onClick={() => { const m = goals.find(g => g.fromMocks); if (week && m) { pickGoal(m.id); setTitle('Full mock'); setTarget(1); } else preset('Full mock', 'ALL', 'mock', 1, 'mock'); }}>Full mock</button>
+              <button type="button" className={`chip ${picked === 'mock' || goal?.fromMocks ? 'on' : ''}`} onClick={() => { const m = goals.find(g => g.fromMocks); if (m) { pickGoal(m.id); setTitle('Full mock'); setTarget(1); } else preset('Full mock', 'ALL', 'mock', 1, 'mock'); }}>Full mock</button>
               <button type="button" className={`chip ${picked === 'analysis' ? 'on' : ''}`} onClick={() => preset('Mock analysis', 'ALL', 'mock', 1, 'analysis')}>Mock analysis</button>
               {!week && <button type="button" className={`chip ${picked === 'personal' ? 'on' : ''}`} onClick={() => { preset('', 'ALL', 'done', 1, 'personal'); setXp(20); document.getElementById('tt')?.focus(); }}>Personal</button>}
             </div>
@@ -108,7 +108,7 @@ export function TaskSheet({ draft, onClose }: { draft: TaskDraft | null; onClose
             <option value="">Nothing — just a task</option>
             {goals.map(g => <option key={g.id} value={g.id}>{g.label}</option>)}
           </select>
-          <p className="hint">{goal?.fromMocks ? 'Fills itself when you log a mock on the Mocks tab this week.' : goal ? `Progress here moves your total goal and earns XP. About ${suggest(goal)} ${goal.unit} ${week ? 'a week' : 'a day'} finishes it ${byText(goal)}.` : 'Not linked to a total goal — it won’t earn per-unit XP, but finishing it still counts.'}</p>
+          <p className="hint">{goal?.fromMocks ? `Ticks itself when you log a mock on the Mocks tab${week ? ' this week' : ' today'}.` : goal ? `Progress here moves your total goal and earns XP. About ${suggest(goal)} ${goal.unit} ${week ? 'a week' : 'a day'} finishes it ${byText(goal)}.` : 'Not linked to a total goal — it won’t earn per-unit XP, but finishing it still counts.'}</p>
         </div>
         <div className="two">
           <div className="field">

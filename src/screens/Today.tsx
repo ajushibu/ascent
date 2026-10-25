@@ -123,7 +123,9 @@ export function Today() {
           <div className="divider" />
           <div className="two">
             <button className="btn" onClick={() => ui.openFocus({ section: next.section, taskId: next.id })}><I.Play size={22} /> Focus</button>
-            <button className="btn ghost" onClick={() => logProgress(next, nextGoal?.step ?? 1)}><I.Check size={22} /> {next.target > 1 ? `+${fmtNum(nextGoal?.step ?? 1)} done` : 'Done'}</button>
+            {nextGoal?.fromMocks ? (
+              <button className="btn ghost" onClick={() => ui.setTab('mocks')}><I.Paper size={22} /> Log mock</button>
+            ) : (<button className="btn ghost" onClick={() => logProgress(next, nextGoal?.step ?? 1)}><I.Check size={22} /> {next.target > 1 ? `+${fmtNum(nextGoal?.step ?? 1)} done` : 'Done'}</button>)}
           </div>
         </section>
       ) : (
