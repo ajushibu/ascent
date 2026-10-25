@@ -363,7 +363,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             ...s,
             tasks: s.tasks.map(t => (t.id === id ? stamp({ ...t, ...p }) : t)),
             // moving a goal to another total carries its progress along
-            entries: moved ? s.entries.map(e => (e.taskId === id && !e.deleted ? stamp({ ...e, goalId: p.goalId ?? null }) : e)) : s.entries
+            entries: moved ? s.entries.map(e => (e.taskId === id && !e.deleted ? stamp({ ...e, goalId: s.goals.some(g => g.id === p.goalId && g.fromMocks) ? null : (p.goalId ?? null) }) : e)) : s.entries
           };
         }),
       deleteTask: id =>
@@ -378,14 +378,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           s => {
             // never log more than what is left: tapping a finished goal again, or a step bigger than the remainder,
             // must not inflate totals and XP
-            // mock progress comes only from logged mocks, never from a tap
-            if (task.goalId && s.goals.some(g => g.id === task.goalId && g.fromMocks)) return s;
+            // a weekly mock goal fills only from logged mocks; a daily "Full mock" can be ticked by hand,
+            // but that tick never counts toward the mock total — only a logged mock does
+            const mockGoal = !!task.goalId && s.goals.some(g => g.id === task.goalId && g.fromMocks);
+            if (mockGoal && task.scope === 'week') return s;
             const left = task.target - taskProgress(s, task);
             const a = Math.round(Math.min(amount, left) * 100) / 100;
             if (!(a > 0)) return s;
             return {
               ...s,
-              entries: [...s.entries, { id: uid(), dateKey: entryDate(task), goalId: task.goalId, taskId: task.scope === 'week' && task.goalId ? null : task.id, amount: a, ts: Date.now(), updatedAt: Date.now() }]
+              entries: [...s.entries, { id: uid(), dateKey: entryDate(task), goalId: mockGoal ? null : task.goalId, taskId: task.scope === 'week' && task.goalId ? null : task.id, amount: a, ts: Date.now(), updatedAt: Date.now() }]
             };
           },
           { toast: 'Logged' }

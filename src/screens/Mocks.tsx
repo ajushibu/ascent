@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import type { Mock, SectionScore } from '../types';
 import { useStore } from '../store';
 import { useUi } from '../ui-context';
-import { fromKey, mocksOf, weakestSection } from '../logic';
+import { fromKey, mocksOf, unloggedMockDays, weakestSection } from '../logic';
 import { XP_MOCK, XP_MOCK_ANALYSED } from '../reconcile';
 import { parseMockImage } from '../parseMock';
 import { Sheet, colorVar, sectionColor } from '../components/ui';
@@ -80,8 +80,9 @@ const blank = (today: string): Form => ({ name: '', dateKey: today, overall: [''
 const toF = (s: SectionScore): [string, string] => [s.score == null ? '' : String(s.score), s.percentile == null ? '' : String(s.percentile)];
 const fromF = (f: [string, string]): SectionScore => ({ score: f[0].trim() === '' || isNaN(Number(f[0])) ? null : Number(f[0]), percentile: f[1].trim() === '' || isNaN(Number(f[1])) ? null : Math.max(0, Math.min(100, Number(f[1]))) });
 
-function MockSheet({ initial, onClose }: { initial: Form | 'new'; onClose: () => void }) {
-  const { today, saveMock, state } = useStore();
+function MockSheet({ initial, date, onClose }: { initial: Form | 'new'; date?: string; onClose: () => void }) {
+  const { today: realToday, saveMock, state } = useStore();
+  const today = date ?? realToday;
   const [form, setForm] = useState<Form | null>(initial === 'new' ? null : initial);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -155,6 +156,8 @@ export function Mocks() {
   const prev = mocks[mocks.length - 2];
   const weak = weakestSection(mocks);
   const [sheet, setSheet] = useState<Form | 'new' | null>(null);
+  const [sheetDate, setSheetDate] = useState<string | undefined>();
+  const pending = unloggedMockDays(state);
   const delta = latest && prev && latest.overall.percentile != null && prev.overall.percentile != null ? latest.overall.percentile - prev.overall.percentile : null;
   const label = { VARC: 'VARC', DILR: 'DILR', QA: 'Quant', ALL: '' } as const;
 
@@ -194,7 +197,15 @@ export function Mocks() {
         </section>
       )}
 
-      <button className="btn" onClick={() => setSheet('new')}><I.Plus size={24} /> Log a mock</button>
+      {pending.length > 0 && (
+        <section className="card tint-gold" role="status">
+          <h3 className="card-title">Don’t forget to log it</h3>
+          <p className="hint" style={{ margin: '8px 0 14px' }}>You ticked a full mock for {pending.map(fmtDate).join(', ')} but haven’t logged it. Until you do, it won’t count toward your mock total, trend or XP.</p>
+          <button className="btn" onClick={() => { setSheetDate(pending[pending.length - 1]); setSheet('new'); }}>Log it now</button>
+        </section>
+      )}
+
+      <button className="btn" onClick={() => { setSheetDate(undefined); setSheet('new'); }}><I.Plus size={24} /> Log a mock</button>
 
       {[...mocks].reverse().map((m, ri) => {
         const n = mocks.length - ri;
@@ -238,7 +249,7 @@ export function Mocks() {
         );
       })}
 
-      {sheet && <MockSheet key={sheet === 'new' ? 'new' : sheet.id} initial={sheet} onClose={() => setSheet(null)} />}
+      {sheet && <MockSheet key={sheet === 'new' ? 'new' : sheet.id} initial={sheet} date={sheetDate} onClose={() => setSheet(null)} />}
     </div>
   );
 }

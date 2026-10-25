@@ -108,7 +108,7 @@ export function TaskSheet({ draft, onClose }: { draft: TaskDraft | null; onClose
             <option value="">Nothing — just a task</option>
             {goals.map(g => <option key={g.id} value={g.id}>{g.label}</option>)}
           </select>
-          <p className="hint">{goal?.fromMocks ? `Ticks itself when you log a mock on the Mocks tab${week ? ' this week' : ' today'}.` : goal ? `Progress here moves your total goal and earns XP. About ${suggest(goal)} ${goal.unit} ${week ? 'a week' : 'a day'} finishes it ${byText(goal)}.` : 'Not linked to a total goal — it won’t earn per-unit XP, but finishing it still counts.'}</p>
+          <p className="hint">{goal?.fromMocks ? week ? 'Fills itself when you log a mock on the Mocks tab this week.' : 'Tick it yourself when you’ve done it. The Mocks tab will remind you to log the scores.' : goal ? `Progress here moves your total goal and earns XP. About ${suggest(goal)} ${goal.unit} ${week ? 'a week' : 'a day'} finishes it ${byText(goal)}.` : 'Not linked to a total goal — it won’t earn per-unit XP, but finishing it still counts.'}</p>
         </div>
         <div className="two">
           <div className="field">

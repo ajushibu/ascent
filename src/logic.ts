@@ -75,10 +75,24 @@ export function taskProgress(s: AppState, t: Task): number {
     return round2(es.filter(e => e.goalId === t.goalId && days.has(e.dateKey)).reduce((a, e) => a + e.amount, 0));
   }
   if (t.scope === 'day' && t.goalId && s.goals.some(g => g.id === t.goalId && !g.deleted && g.fromMocks)) {
-    // a daily mock task fills itself from the mocks logged on that day
-    return round2(es.filter(e => e.goalId === t.goalId && e.dateKey === t.key).reduce((a, e) => a + e.amount, 0));
+    // a daily mock task can be ticked by hand, and also ticks itself once a mock is logged for that day
+    const ticked = es.filter(e => e.taskId === t.id).reduce((a, e) => a + e.amount, 0);
+    const logged = es.filter(e => e.goalId === t.goalId && e.dateKey === t.key).reduce((a, e) => a + e.amount, 0);
+    return round2(Math.max(ticked, logged));
   }
   return round2(es.filter(e => e.taskId === t.id).reduce((a, e) => a + e.amount, 0));
+}
+
+/** Days where a mock was ticked off by hand but no mock has been logged for that day yet. */
+export function unloggedMockDays(s: AppState): string[] {
+  const logged = new Set(mocksOf(s).map(m => m.dateKey));
+  const days = new Set<string>();
+  for (const t of tasksOf(s)) {
+    if (t.scope !== 'day' || !t.goalId || logged.has(t.key)) continue;
+    if (!s.goals.some(g => g.id === t.goalId && !g.deleted && g.fromMocks)) continue;
+    if (entriesOf(s).some(e => e.taskId === t.id && e.amount > 0)) days.add(t.key);
+  }
+  return [...days].sort();
 }
 
 export const taskRatio = (s: AppState, t: Task) => (t.target <= 0 ? 1 : Math.min(1, taskProgress(s, t) / t.target));

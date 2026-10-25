@@ -100,3 +100,17 @@ test('a daily mock task ticks itself from the mock logged that day, and only tha
     return done(r.state).then(d2 => assert.equal(d2, true));
   });
 });
+
+test('a hand-ticked daily mock is flagged until a mock is logged for that day, and never counts as one', async () => {
+  const { unloggedMockDays, goalDone } = await import('./logic.ts');
+  const s = base();
+  s.tasks.push({ id: 'dm', scope: 'day', key: T, title: 'Full mock', goalId: 'g-mock', section: 'ALL', target: 1, unit: 'mock', updatedAt: 1 });
+  s.entries.push({ id: 'e1', dateKey: T, goalId: null, taskId: 'dm', amount: 1, ts: 1, updatedAt: 1 });
+  let r = reconcile(s);
+  assert.deepEqual(unloggedMockDays(r.state), [T]);
+  assert.equal(goalDone(r.state, 'g-mock'), 0); // the tick alone adds nothing to the mock total
+  r.state.mocks.push({ id: 'm1', name: 'Mock 1', dateKey: T, overall: { score: null, percentile: 80 }, varc: { score: null, percentile: null }, dilr: { score: null, percentile: null }, qa: { score: null, percentile: null }, notes: '', analysed: false, updatedAt: 1 } as never);
+  r = reconcile(r.state);
+  assert.deepEqual(unloggedMockDays(r.state), []);
+  assert.equal(goalDone(r.state, 'g-mock'), 1);
+});

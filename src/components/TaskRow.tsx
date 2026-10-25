@@ -11,7 +11,7 @@ export function TaskRow({ task, onEdit }: { task: Task; onEdit?: (t: Task) => vo
   const done = taskDone(state, task);
   const step = goal?.step ?? 1;
   const unitStep = task.target <= 1 ? 1 : step;
-  const auto = !!goal?.fromMocks; // filled by logging mocks, never by hand
+  const auto = !!goal?.fromMocks && task.scope === 'week'; // weekly mocks fill from logged mocks; a daily one can be ticked by hand
 
   return (
     <div className="task" style={colorVar(sectionColor(task.section))}>
@@ -28,7 +28,7 @@ export function TaskRow({ task, onEdit }: { task: Task; onEdit?: (t: Task) => vo
         <div className={`t ${done ? 'done' : ''}`}>{task.title}</div>
         <div className="s">
           {fmtNum(prog)} / {fmtNum(task.target)} {task.unit}
-          {auto ? ' · fills when you log a mock' : task.scope === 'week' && task.goalId ? ' · auto from daily work' : ''}
+          {auto ? ' · fills when you log a mock' : goal?.fromMocks ? ' · log it on the Mocks tab too' : task.scope === 'week' && task.goalId ? ' · auto from daily work' : ''}
         </div>
       </button>
       {!auto && task.target > 1 && !done && (
