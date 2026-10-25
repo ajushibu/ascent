@@ -114,21 +114,3 @@ test('a hand-ticked daily mock is flagged until a mock is logged for that day, a
   assert.deepEqual(unloggedMockDays(r.state), []);
   assert.equal(goalDone(r.state, 'g-mock'), 1);
 });
-
-test('a done daily Full mock pays 100 XP, and the logged mock is not paid again that day', () => {
-  const s = base();
-  s.tasks.push({ id: 'dm', scope: 'day', key: T, title: 'Full mock', goalId: 'g-mock', section: 'ALL', target: 1, unit: 'mock', updatedAt: 1 });
-  s.entries.push({ id: 'e1', dateKey: T, goalId: null, taskId: 'dm', amount: 1, ts: 1, updatedAt: 1 });
-  let r = reconcile(s);
-  assert.equal(xpTotal(r.state), 100 + 30); // task + day bonus
-  r.state.mocks.push({ id: 'm1', name: 'Mock 1', dateKey: T, overall: { score: null, percentile: 80 }, varc: { score: null, percentile: null }, dilr: { score: null, percentile: null }, qa: { score: null, percentile: null }, notes: '', analysed: false, updatedAt: 1 } as never);
-  r = reconcile(r.state);
-  assert.equal(xpTotal(r.state), 100 + 30); // still one mock's worth, not two
-});
-
-test('a mock analysis task earns the XP set on it', () => {
-  const s = base();
-  s.tasks.push({ id: 'ma', scope: 'day', key: T, title: 'Mock analysis', goalId: null, section: 'ALL', target: 1, unit: 'mock', xp: 100, updatedAt: 1 });
-  s.entries.push({ id: 'e1', dateKey: T, goalId: null, taskId: 'ma', amount: 1, ts: 1, updatedAt: 1 });
-  assert.equal(xpTotal(reconcile(s).state), 100 + 30);
-});

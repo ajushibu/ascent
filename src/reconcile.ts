@@ -64,16 +64,9 @@ export function reconcile(input: AppState, now = Date.now()): { state: AppState;
   }
 
   const tasks = tasksOf(s);
-  /* a daily "Full mock" task is worth a whole mock (100 XP) when done; the mock itself then isn't paid a second time */
-  const mockGoalIds = new Set(goalsOf(s).filter(g => g.fromMocks).map(g => g.id));
-  const paidMockDays = new Set<string>();
   for (const t of tasks) {
-    if (taskDone(s, t) && taskProgress(s, t) > 0) {
-      const mockTask = t.scope === 'day' && !!t.goalId && mockGoalIds.has(t.goalId);
-      if (mockTask && (t.xp ?? XP_MOCK) > 0) paidMockDays.add(t.key);
-      const amount = t.goalId && !mockTask ? XP_TASK : Math.max(0, Math.round(t.xp ?? (mockTask ? XP_MOCK : XP_TASK)));
-      add({ reason: 'task', ref: t.id, dateKey: completionDate(s, t.id, t.goalId, t.scope, t.key), amount });
-    }
+    if (taskDone(s, t) && taskProgress(s, t) > 0)
+      add({ reason: 'task', ref: t.id, dateKey: completionDate(s, t.id, t.goalId, t.scope, t.key), amount: t.goalId ? XP_TASK : Math.max(0, Math.round(t.xp ?? XP_TASK)) });
   }
 
   const dayKeys = new Set(tasks.filter(t => t.scope === 'day').map(t => t.key));
@@ -92,7 +85,7 @@ export function reconcile(input: AppState, now = Date.now()): { state: AppState;
   }
 
   for (const m of mocksOf(s)) {
-    if (!paidMockDays.has(m.dateKey)) add({ reason: 'mock', ref: m.id, dateKey: m.dateKey, amount: XP_MOCK });
+    add({ reason: 'mock', ref: m.id, dateKey: m.dateKey, amount: XP_MOCK });
     if (m.analysed) add({ reason: 'mockA', ref: m.id, dateKey: m.dateKey, amount: XP_MOCK_ANALYSED });
   }
 
