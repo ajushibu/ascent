@@ -235,11 +235,51 @@ export function pace(s: AppState, startKey: string, today: string) {
   return { doneRatio, timeRatio, gap: doneRatio - timeRatio };
 }
 
-/** Units per day needed from today to finish a goal by the exam. */
+/** The day a total goal should be finished by: the exam day, or `finishBefore` days earlier. */
+export const goalDeadline = (g: Goal, examDate: string) => addDays(examDate, -Math.max(0, Math.round(g.finishBefore ?? 0)));
+
+/** The deadline that still lies ahead; a deadline already missed falls back to the exam day so suggestions stay sane. */
+function effectiveDeadline(g: Goal, examDate: string, today: string) {
+  const d = goalDeadline(g, examDate);
+  return d >= today ? { date: d, missed: false } : { date: examDate, missed: true };
+}
+
+/** Units per day needed from today to finish a goal by its deadline. */
 export function neededPerDay(g: Goal, done: number, today: string, examDate: string): number {
   const left = Math.max(0, g.total - done);
-  const days = Math.max(1, daysBetween(today, examDate));
+  const days = Math.max(1, daysBetween(today, effectiveDeadline(g, examDate, today).date) + 1);
   return left / days;
+}
+
+export interface WeeklyPlan {
+  /** units to aim for in that week (0 = nothing needed) */
+  amount: number;
+  /** units still to do at the start of the current week */
+  left: number;
+  weeksLeft: number;
+  deadline: string;
+  /** the goal's own deadline has passed: paced to the exam day instead */
+  missed: boolean;
+}
+
+/**
+ * What to aim for in a week so the goal is finished by its deadline: what was left when the current week began,
+ * spread evenly over the weeks from now until the deadline. Same number for every upcoming week, so it doesn't
+ * change as the person logs progress during the week. Null for weeks already gone.
+ */
+export function weeklyPlan(s: AppState, g: Goal, weekKey: string, today: string): WeeklyPlan | null {
+  const base = weekStart(today);
+  const wk = weekStart(weekKey);
+  if (wk < base) return null;
+  const { date, missed } = effectiveDeadline(g, s.settings.examDate, today);
+  const doneBefore = round2(entriesOf(s).filter(e => e.goalId === g.id && e.dateKey < base).reduce((a, e) => a + e.amount, 0));
+  const left = Math.max(0, round2(g.total - doneBefore));
+  const weeksLeft = Math.max(1, Math.floor(daysBetween(base, weekStart(date)) / 7) + 1);
+  const step = g.step || 1;
+  const up = (n: number) => Math.ceil(n / step - 1e-9) * step;
+  const pastDeadlineWeek = wk > weekStart(date);
+  const amount = left <= 1e-9 || pastDeadlineWeek ? 0 : Math.max(step, up(left / weeksLeft));
+  return { amount: Math.min(amount, up(left)), left, weeksLeft, deadline: date, missed };
 }
 
 export function entriesForGoalOnDay(es: Entry[], goalId: string, key: string) {

@@ -17,7 +17,7 @@ with sync_playwright() as p:
     # add a daily goal linked to DI sets
     page.get_by_role('button', name='Add today’s goals').click()
     page.get_by_role('button', name='DI sets', exact=True).click()
-    expect(page.get_by_text('keeps you on pace')).to_be_visible()  # suggested target is shown
+    expect(page.get_by_text('finishes it by exam day')).to_be_visible()  # suggested target is shown
     page.get_by_label('decrease').click()  # suggestion is 2 a day; use 1 for the test
     page.get_by_role('button', name='Add goal').click()
     expect(page.get_by_text('Up next')).to_be_visible()

@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import type { Section, Task } from '../types';
+import type { Goal, Section, Task } from '../types';
 import { SECTION_LABEL } from '../types';
 import { useStore } from '../store';
-import { daysBetween, goalDone, goalsOf } from '../logic';
+import { daysBetween, goalDeadline, goalDone, goalsOf, todayKey, weeklyPlan } from '../logic';
 import { Sheet, Stepper, colorVar, sectionColor } from '../components/ui';
 
 export interface TaskDraft {
@@ -44,13 +44,19 @@ export function TaskSheet({ draft, onClose }: { draft: TaskDraft | null; onClose
   const week = draft.scope === 'week';
 
   /** A sensible default: what it takes per week / per day to finish the total by exam day. */
-  const suggest = (g: { id: string; total: number; step: number }) => {
-    const left = Math.max(0, g.total - goalDone(state, g.id));
-    const span = Math.max(1, daysBetween(draft.key, state.settings.examDate) + 1);
-    const per = draft.scope === 'week' ? Math.ceil(left / Math.max(1, Math.ceil(span / 7))) : Math.ceil(left / span);
+  const suggest = (g: Goal) => {
     const step = g.step || 1;
-    return Math.max(step, Math.ceil(per / step) * step);
+    if (draft.scope === 'week') {
+      const p = weeklyPlan(state, g, draft.key, todayKey());
+      if (p && p.amount > 0) return p.amount;
+    }
+    const left = Math.max(0, g.total - goalDone(state, g.id));
+    const end = goalDeadline(g, state.settings.examDate);
+    const span = Math.max(1, daysBetween(draft.key, end >= draft.key ? end : state.settings.examDate) + 1);
+    return Math.max(step, Math.ceil(Math.ceil(left / span) / step) * step);
   };
+  const byText = (g: Goal) =>
+    (g.finishBefore ?? 0) > 0 ? `by ${new Date(goalDeadline(g, state.settings.examDate) + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}` : 'by exam day';
 
   const pickGoal = (id: string | null) => {
     setGoalId(id);
@@ -102,7 +108,7 @@ export function TaskSheet({ draft, onClose }: { draft: TaskDraft | null; onClose
             <option value="">Nothing — just a task</option>
             {goals.map(g => <option key={g.id} value={g.id}>{g.label}</option>)}
           </select>
-          <p className="hint">{goal?.fromMocks ? 'Fills itself when you log a mock on the Mocks tab this week.' : goal ? `Progress here moves your total goal and earns XP. About ${suggest(goal)} ${goal.unit} ${week ? 'a week' : 'a day'} keeps you on pace.` : 'Not linked to a total goal — it won’t earn per-unit XP, but finishing it still counts.'}</p>
+          <p className="hint">{goal?.fromMocks ? 'Fills itself when you log a mock on the Mocks tab this week.' : goal ? `Progress here moves your total goal and earns XP. About ${suggest(goal)} ${goal.unit} ${week ? 'a week' : 'a day'} finishes it ${byText(goal)}.` : 'Not linked to a total goal — it won’t earn per-unit XP, but finishing it still counts.'}</p>
         </div>
         <div className="two">
           <div className="field">

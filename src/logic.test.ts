@@ -96,3 +96,24 @@ test('no suggestion when the week is done or the goal is already planned today',
   st.tasks.push({ id: 'd', scope: 'day', key: '2026-10-22', title: 'Quant', goalId: 'g', section: 'QA', target: 2, unit: 'topics', updatedAt: 1 });
   assert.equal(dailySuggestions(st, '2026-10-22').length, 0);
 });
+
+test('weekly plan paces a goal to its own deadline, not the exam day', async () => {
+  const { weeklyPlan, goalDeadline } = await import('./logic.ts');
+  const { emptyState } = await import('./merge.ts');
+  const s = emptyState();
+  s.settings.examDate = '2026-11-29';
+  const g = { id: 'q', label: 'Notion', unit: 'pages', total: 36, section: 'QA' as const, xpPerUnit: 20, step: 1, order: 0, updatedAt: 1, finishBefore: 7 };
+  s.goals = [g];
+  assert.equal(goalDeadline(g, s.settings.examDate), '2026-11-22');
+  // Mon 26 Oct: weeks Oct26, Nov2, 9, 16 (deadline Sun 22 Nov is in the Nov16 week) = 4 weeks -> 9/week
+  const p = weeklyPlan(s, g, '2026-10-26', '2026-10-26')!;
+  assert.equal(p.weeksLeft, 4);
+  assert.equal(p.amount, 9);
+  // same goal with no deadline spreads over 5 weeks (Nov 23 week included)
+  const q = weeklyPlan(s, { ...g, finishBefore: 0 }, '2026-10-26', '2026-10-26')!;
+  assert.equal(q.weeksLeft, 5);
+  assert.equal(q.amount, 8);
+  // nothing needed in a week after the deadline week; past weeks give null
+  assert.equal(weeklyPlan(s, g, '2026-11-23', '2026-10-26')!.amount, 0);
+  assert.equal(weeklyPlan(s, g, '2026-10-19', '2026-10-26'), null);
+});

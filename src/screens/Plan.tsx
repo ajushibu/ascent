@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useStore } from '../store';
 import { useUi } from '../ui-context';
 import {
-  addDays, daysLeft, dayTasks, fmtNum, fromKey, goalDone, goalsOf, neededPerDay, pace, taskRatio, weekDays, weekProgress, weekStart, weekTasks
+  addDays, daysLeft, goalDeadline, weeklyPlan, dayTasks, fmtNum, fromKey, goalDone, goalsOf, neededPerDay, pace, taskRatio, weekDays, weekProgress, weekStart, weekTasks
 } from '../logic';
 import { Slant, colorVar, sectionColor, SectionTag } from '../components/ui';
 import { I } from '../components/icons';
@@ -37,6 +37,13 @@ export function Plan() {
 
   /* week tab */
   const wTasks = weekTasks(state, weekKey);
+  /* one weekly goal per total goal that is still unfinished and has none this week, sized to finish by its deadline */
+  const suggestions = goals.flatMap(g => {
+    if (wTasks.some(t => t.goalId === g.id)) return [];
+    const p = weeklyPlan(state, g, weekKey, today);
+    if (!p || p.amount <= 0) return [];
+    return [{ scope: 'week' as const, key: weekKey, title: g.label, goalId: g.id, section: g.section, target: p.amount, unit: g.unit }];
+  });
   const wRatio = wTasks.length ? wTasks.reduce((a, t) => a + taskRatio(state, t), 0) / wTasks.length : 0;
   const reward = state.rewards.find(r => !r.deleted && r.weekKey === weekKey);
   const [rewardText, setRewardText] = useState('');
@@ -108,6 +115,7 @@ export function Plan() {
                   <span className="muted">{Math.round(ratio * 100)}% done</span>
                   <span style={{ color: ratio >= 1 ? 'var(--good)' : 'var(--ink-2)' }}>{ratio >= 1 ? 'Complete' : `Needs ${fmtNum(Math.ceil(need * 10) / 10)} / day`}</span>
                 </div>
+                <div className="small muted" style={{ marginTop: 8, fontWeight: 700 }}>{(g.finishBefore ?? 0) > 0 ? `Finish by ${fmtDay(goalDeadline(g, st.examDate), { day: 'numeric', month: 'short' })} · ${g.finishBefore} days before exam` : 'Finish by exam day'}</div>
               </section>
             );
           })}
@@ -137,6 +145,14 @@ export function Plan() {
                 <button className="btn sm" onClick={() => ui.openTask({ scope: 'week', key: weekKey })}><I.Plus size={20} /> Add weekly goal</button>
               </div>
             ) : wTasks.map(t => <TaskRow key={t.id} task={t} onEdit={task => ui.openTask({ scope: 'week', key: weekKey, task })} />)}
+            {suggestions.length > 0 && (
+              <div style={{ marginTop: 14 }}>
+                <button className="btn ghost" onClick={() => { suggestions.forEach(x => addTask(x)); }}>
+                  <I.Bolt size={20} /> Suggest this week’s goals ({suggestions.length})
+                </button>
+                <p className="hint" style={{ marginTop: 8 }}>{suggestions.map(x => `${fmtNum(x.target)} ${x.unit}`).join(' · ')} — paced so each total finishes by its own deadline. Edit any after adding.</p>
+              </div>
+            )}
           </section>
 
           <section className="card tint-gold">

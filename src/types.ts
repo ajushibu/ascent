@@ -17,6 +17,8 @@ export interface Goal extends Base {
   order: number;
   /** Mocks goal is fed by the Mocks screen, so tasks cannot be linked to it. */
   fromMocks?: boolean;
+  /** Finish this many days before the exam (0 = exam day). Weekly suggestions are paced to this date. */
+  finishBefore?: number;
 }
 
 /** A manually-set daily or weekly target. */
