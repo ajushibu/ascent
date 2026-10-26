@@ -89,7 +89,7 @@ export function TaskSheet({ draft, onClose }: { draft: TaskDraft | null; onClose
           <div className="field">
             <label>Quick pick</label>
             <div className="chips">
-              {goals.map(g => (
+              {goals.filter(g => !g.fromMocks).map(g => (
                 <button key={g.id} type="button" className={`chip ${goalId === g.id ? 'on' : ''}`} style={colorVar(sectionColor(g.section))} onClick={() => pickGoal(g.id)}>{g.label.split(' · ')[0]}</button>
               ))}
               <button type="button" className={`chip ${picked === 'mock' || goal?.fromMocks ? 'on' : ''}`} onClick={() => { const m = goals.find(g => g.fromMocks); if (m) { pickGoal(m.id); setTitle('Full mock'); setTarget(1); } else preset('Full mock', 'ALL', 'mock', 1, 'mock'); }}>Full mock</button>
